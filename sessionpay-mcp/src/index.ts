@@ -411,9 +411,11 @@ class SessionPayMCPServer {
     endTimestamp: number,
     limit: number
   ) {
-    // Query recent blocks only (last 100,000 blocks = ~2 weeks on Base)
+    // Cap at 10k blocks to stay within RPC provider limits
     const currentBlock = await this.provider.getBlockNumber();
-    const fromBlock = Math.max(0, currentBlock - 100000);
+    const fromBlock = Math.max(0, currentBlock - 10000);
+
+    log(`[SessionPay MCP] 🔍 RPC query: blocks ${fromBlock}-${currentBlock} (10k block limit)`);
 
     const transferTopic = ethers.id('Transfer(address,address,uint256)');
     const addressTopic = ethers.zeroPadValue(wallet_address.toLowerCase(), 32);
@@ -473,7 +475,7 @@ class SessionPayMCPServer {
     // Sort by block number descending
     transactions.sort((a, b) => b.blockNumber - a.blockNumber);
 
-    return this.formatTransactionResponse(wallet_address, transactions, startTimestamp, endTimestamp, limit, true);
+    return this.formatTransactionResponse(wallet_address, transactions, startTimestamp, endTimestamp, limit);
   }
 
   private formatTransactionResponse(
@@ -481,8 +483,7 @@ class SessionPayMCPServer {
     transactions: Transaction[],
     startTimestamp: number,
     endTimestamp: number,
-    limit: number,
-    isRPCFallback: boolean = false
+    limit: number
   ) {
     const limitedTransactions = transactions.slice(0, limit);
 
@@ -513,7 +514,6 @@ class SessionPayMCPServer {
               },
               transactions: limitedTransactions,
               network: 'Base Mainnet',
-              note: isRPCFallback ? 'Data retrieved via RPC (recent blocks only due to API rate limits)' : undefined,
             },
             null,
             2

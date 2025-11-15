@@ -5,6 +5,7 @@ export type MessageType = 'join' | 'chat' | 'system' | 'user_list' | 'agent' | '
 export interface JoinMessage {
   type: 'join';
   username: string;
+  apiKey?: 'main' | 'sunny';
 }
 
 export interface ChatMessage {

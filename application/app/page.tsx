@@ -10,6 +10,7 @@ export default function ChatPage() {
   const [connected, setConnected] = useState(false);
   const [joined, setJoined] = useState(false);
   const [username, setUsername] = useState('');
+  const [apiKey, setApiKey] = useState<'main' | 'sunny'>('main');
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<ServerMessage[]>([]);
   const [users, setUsers] = useState<string[]>([]);
@@ -79,9 +80,10 @@ export default function ChatPage() {
     const joinMessage: ClientMessage = {
       type: 'join',
       username: username.trim(),
+      apiKey: apiKey,
     };
 
-    console.log('[Client] Joining as:', username);
+    console.log('[Client] Joining as:', username, 'with API key:', apiKey);
     ws.send(JSON.stringify(joinMessage));
     setJoined(true);
   };
@@ -221,6 +223,20 @@ export default function ChatPage() {
               disabled={!connected}
               autoFocus
             />
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                API Key
+              </label>
+              <select
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value as 'main' | 'sunny')}
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                disabled={!connected}
+              >
+                <option value="main">Main API</option>
+                <option value="sunny">Sunny's API</option>
+              </select>
+            </div>
             <button
               type="submit"
               disabled={!connected || !username.trim()}

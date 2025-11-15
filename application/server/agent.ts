@@ -75,7 +75,13 @@ export class LocusAgent {
       // Build system prompt
       const systemPrompt = `You are a helpful assistant that can help with payments and blockchain transactions.
 Your internal wallet address is ${process.env.WALLET_ADDR}.
-You have access to Locus and SessionPay tools to help users with payments. Be succint in your answers.`;
+You have access to Locus and SessionPay tools to help users with payments. Be succint in your answers.
+
+IMPORTANT RULES:
+- When showing transaction history, ONLY show the transactions - do NOT calculate or show "Net" amounts from partial history
+- Transaction history shows activity in a time range, NOT wallet balances
+- If the user asks for balance or net position, use the get_wallet_balance tool separately
+- Never calculate "net" from a subset of transactions - it's misleading`;
 
       // Build context from chat history
       const context = this.buildContext(chatHistory);

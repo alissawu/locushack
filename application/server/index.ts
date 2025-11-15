@@ -11,6 +11,7 @@ config({ path: '../.env' });
 // Verify env vars loaded
 console.log('[Server] Environment check:', {
   LOCUS_API_KEY: process.env.LOCUS_API_KEY ? `${process.env.LOCUS_API_KEY.substring(0, 10)}...` : 'MISSING',
+  SUNNY_LOCUS_API_KEY: process.env.SUNNY_LOCUS_API_KEY ? `${process.env.SUNNY_LOCUS_API_KEY.substring(0, 10)}...` : 'MISSING',
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? `${process.env.ANTHROPIC_API_KEY.substring(0, 10)}...` : 'MISSING'
 });
 
@@ -20,6 +21,7 @@ const HOST = '0.0.0.0'; // Bind to all network interfaces for LAN access
 interface Client {
   ws: WebSocket;
   username: string | null;
+  apiKey: 'main' | 'sunny';
 }
 
 const clients = new Map<WebSocket, Client>();
@@ -34,12 +36,18 @@ const log = {
     console.log(`[WS Server] ${new Date().toISOString()} - [${username || 'Anonymous'}] ${msg}`)
 };
 
-// Initialize Locus agent
-const agent = new LocusAgent(
-  process.env.LOCUS_API_KEY || '',
-  process.env.ANTHROPIC_API_KEY || ''
-);
-log.info('Agent initialized');
+// Initialize Locus agents (one per API key)
+const agents = {
+  main: new LocusAgent(
+    process.env.LOCUS_API_KEY || '',
+    process.env.ANTHROPIC_API_KEY || ''
+  ),
+  sunny: new LocusAgent(
+    process.env.SUNNY_LOCUS_API_KEY || '',
+    process.env.ANTHROPIC_API_KEY || ''
+  )
+};
+log.info('Agents initialized (main + sunny)');
 
 const wss = new WebSocketServer({
   port: PORT,
@@ -75,7 +83,7 @@ wss.on('listening', () => {
 });
 
 wss.on('connection', (ws: WebSocket) => {
-  const client: Client = { ws, username: null };
+  const client: Client = { ws, username: null, apiKey: 'main' };
   clients.set(ws, client);
 
   log.info(`New connection established (Total: ${clients.size})`);
@@ -87,7 +95,8 @@ wss.on('connection', (ws: WebSocket) => {
       if (message.type === 'join') {
         // Handle user joining
         client.username = message.username;
-        log.client(client.username, 'joined the chat');
+        client.apiKey = message.apiKey || 'main';
+        log.client(client.username, `joined the chat (using ${client.apiKey} API key)`);
 
         // Send all previous messages to the new user
         log.info(`Sending ${allMessages.length} previous messages to ${client.username}`);
@@ -138,7 +147,7 @@ wss.on('connection', (ws: WebSocket) => {
 
         // Check for @locus mention
         if (message.text.includes('@locus')) {
-          log.info('🤖 Agent triggered by @locus mention');
+          log.info(`🤖 Agent triggered by @locus mention (using ${client.apiKey} API key)`);
 
           // Send typing indicator
           const typingStart: AgentTypingMessage = {
@@ -147,8 +156,11 @@ wss.on('connection', (ws: WebSocket) => {
           };
           broadcast(typingStart);
 
+          // Get the appropriate agent for this client's API key
+          const selectedAgent = agents[client.apiKey];
+
           // Trigger agent (async, doesn't block)
-          agent.processMessage(
+          selectedAgent.processMessage(
             message.text,
             chatHistory,
             // Progress callback
