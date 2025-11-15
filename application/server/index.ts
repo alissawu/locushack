@@ -24,12 +24,6 @@ const clients = new Map<WebSocket, Client>();
 const chatHistory: ChatMessage[] = [];
 const allMessages: ServerMessage[] = []; // Store all messages for new clients
 
-// Initialize Locus agent
-const agent = new LocusAgent(
-  process.env.LOCUS_API_KEY || '',
-  process.env.ANTHROPIC_API_KEY || ''
-);
-
 // Logging utility
 const log = {
   info: (msg: string) => console.log(`[WS Server] ${new Date().toISOString()} - ${msg}`),
@@ -38,10 +32,12 @@ const log = {
     console.log(`[WS Server] ${new Date().toISOString()} - [${username || 'Anonymous'}] ${msg}`)
 };
 
-// Initialize agent MCP connection
-agent.initialize().catch(err => {
-  log.error(`Failed to initialize agent: ${err.message}`);
-});
+// Initialize Locus agent
+const agent = new LocusAgent(
+  process.env.LOCUS_API_KEY || '',
+  process.env.ANTHROPIC_API_KEY || ''
+);
+log.info('Agent initialized');
 
 const wss = new WebSocketServer({
   port: PORT,

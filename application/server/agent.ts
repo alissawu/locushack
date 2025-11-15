@@ -3,7 +3,6 @@ import type { ChatMessage } from '../shared/types';
 
 export class LocusAgent {
   private isRunning = false;
-  private isInitialized = false;
   private options: any;
 
   constructor(
@@ -19,16 +18,22 @@ export class LocusAgent {
           headers: {
             'Authorization': `Bearer ${this.locusApiKey}`
           }
+        },
+        'sessionpay': {
+          type: 'stdio' as const,
+          command: 'node',
+          args: ['../sessionpay-mcp/build/index.js']
         }
       },
       allowedTools: [
         'mcp__locus__*',
+        'mcp__sessionpay__*',
         'mcp__list_resources',
         'mcp__read_resource'
       ],
       apiKey: this.anthropicApiKey,
       canUseTool: async (toolName: string, input: any) => {
-        if (toolName.startsWith('mcp__locus__') || toolName.startsWith('mcp__')) {
+        if (toolName.startsWith('mcp__locus__') || toolName.startsWith('mcp__sessionpay__') || toolName.startsWith('mcp__')) {
           console.log(`[Agent] Approving tool: ${toolName}`);
           return {
             behavior: 'allow' as const,
@@ -37,45 +42,10 @@ export class LocusAgent {
         }
         return {
           behavior: 'deny' as const,
-          message: 'Only Locus MCP tools are allowed'
+          message: 'Only Locus and SessionPay MCP tools are allowed'
         };
       }
     };
-  }
-
-  async initialize(): Promise<void> {
-    if (this.isInitialized) {
-      console.log('[Agent] Already initialized, skipping...');
-      return;
-    }
-
-    console.log('[Agent] Initializing MCP connection...');
-
-    try {
-      // Send a simple query to initialize the connection
-      for await (const message of query({
-        prompt: 'Initialize connection. Respond with "ready"',
-        options: this.options
-      })) {
-        if (message.type === 'system' && message.subtype === 'init') {
-          const mcpServers = (message as any).mcp_servers;
-          const mcpInfo = mcpServers?.find((s: any) => s.name === 'locus');
-
-          if (mcpInfo?.status === 'connected') {
-            console.log('[Agent] ✓ MCP server initialized and connected');
-            this.isInitialized = true;
-          } else {
-            console.error('[Agent] ⚠️  MCP initialization failed');
-            console.error('[Agent] Status:', mcpInfo?.status);
-            console.error('[Agent] Error:', mcpInfo?.error);
-          }
-          break; // Exit after init message
-        }
-      }
-    } catch (error) {
-      console.error('[Agent] Initialization error:', error);
-      throw error;
-    }
   }
 
   async processMessage(
@@ -92,21 +62,44 @@ export class LocusAgent {
     const toolsUsed: string[] = [];
 
     try {
+      // Build system prompt
+      const systemPrompt = `You are a helpful assistant that can help with payments and blockchain transactions.
+Your internal wallet address is ${process.env.WALLET_ADDR}.
+You have access to Locus and SessionPay tools to help users with payments. Be succint in your answers.`;
+
       // Build context from chat history
       const context = this.buildContext(chatHistory);
-      const fullPrompt = context ? `${context}\n\nUser: ${userMessage}` : userMessage;
+      const fullPrompt = context
+        ? `${systemPrompt}\n\n${context}\n\nUser: ${userMessage}`
+        : `${systemPrompt}\n\nUser: ${userMessage}`;
 
       console.log('[Agent] Processing message with context:', {
         messageLength: userMessage.length,
         historyItems: chatHistory.length
       });
+      console.log('[Agent] MCP Server config:', JSON.stringify(this.options.mcpServers, null, 2));
 
       // Process agent query
       let responseText = '';
       const responseParts: string[] = [];
 
       for await (const message of query({ prompt: fullPrompt, options: this.options })) {
-        if (message.type === 'tool_progress') {
+        // Log all message types for debugging
+        if (message.type === 'system') {
+          console.log('[Agent] System message:', JSON.stringify(message, null, 2));
+
+          // Check MCP server status
+          if (message.subtype === 'init') {
+            const mcpServers = (message as any).mcp_servers;
+            if (mcpServers) {
+              console.log('[Agent] MCP Servers initialized:', mcpServers.map((s: any) => ({
+                name: s.name,
+                status: s.status,
+                error: s.error
+              })));
+            }
+          }
+        } else if (message.type === 'tool_progress') {
           console.log(`[Agent] Tool progress: ${message.tool_name} (${message.elapsed_time_seconds}s)`);
           onProgress(message.tool_name, message.elapsed_time_seconds);
           if (!toolsUsed.includes(message.tool_name)) {
