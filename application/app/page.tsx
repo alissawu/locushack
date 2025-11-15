@@ -3,32 +3,60 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ClientMessage, ServerMessage } from '@/shared/types';
+import type {
+  ClientMessage,
+  ServerMessage,
+  ConnectMessage,
+  CreateRoomMessage,
+  JoinRoomMessage,
+  RoomListMessage,
+  RoomMode
+} from '@/shared/types';
+
+interface Room {
+  roomId: string;
+  roomName: string;
+  mode: RoomMode;
+  participantCount: number;
+}
 
 export default function ChatPage() {
+  // Connection state
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
-  const [joined, setJoined] = useState(false);
+  const [apiKey, setApiKey] = useState<'main' | 'sunny' | null>(null);
+
+  // Room state
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [currentRoom, setCurrentRoom] = useState<string | null>(null);
   const [username, setUsername] = useState('');
-  const [apiKey, setApiKey] = useState<'main' | 'sunny'>('main');
+  const [wallet, setWallet] = useState('');
+
+  // UI state
+  const [showCreateRoom, setShowCreateRoom] = useState(false);
+  const [showJoinRoom, setShowJoinRoom] = useState(false);
+  const [newRoomName, setNewRoomName] = useState('');
+  const [newRoomMode, setNewRoomMode] = useState<RoomMode>('casual');
+  const [joinRoomId, setJoinRoomId] = useState('');
+
+  // Chat state
   const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<ServerMessage[]>([]);
+  const [messages, setMessages] = useState<Record<string, ServerMessage[]>>({});
   const [users, setUsers] = useState<string[]>([]);
-  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
-  const [mentionFilter, setMentionFilter] = useState('');
-  const [mentionStartPos, setMentionStartPos] = useState(0);
-  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
   const [agentTyping, setAgentTyping] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-scroll to bottom of messages
+  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, currentRoom]);
 
   // WebSocket connection
   useEffect(() => {
+    if (!apiKey) return;
+
     const wsUrl = `ws://${window.location.hostname}:4000`;
     console.log(`[Client] Connecting to ${wsUrl}`);
 
@@ -37,6 +65,13 @@ export default function ChatPage() {
     socket.onopen = () => {
       console.log('[Client] Connected to WebSocket server');
       setConnected(true);
+
+      // Send connect message with API key
+      const connectMsg: ConnectMessage = {
+        type: 'connect',
+        apiKey
+      };
+      socket.send(JSON.stringify(connectMsg));
     };
 
     socket.onmessage = (event) => {
@@ -44,12 +79,21 @@ export default function ChatPage() {
         const data: ServerMessage = JSON.parse(event.data);
         console.log('[Client] Received:', data);
 
-        if (data.type === 'user_list') {
+        if (data.type === 'room_list') {
+          setRooms(data.rooms);
+        } else if (data.type === 'user_list') {
           setUsers(data.users);
         } else if (data.type === 'agent_typing') {
-          setAgentTyping(data.isTyping);
+          if (data.roomId === currentRoom) {
+            setAgentTyping(data.isTyping);
+          }
         } else {
-          setMessages((prev) => [...prev, data]);
+          // Add message to appropriate room
+          const roomId = (data as any).roomId || 'global';
+          setMessages((prev) => ({
+            ...prev,
+            [roomId]: [...(prev[roomId] || []), data]
+          }));
         }
       } catch (err) {
         console.error('[Client] Failed to parse message:', err);
@@ -63,7 +107,6 @@ export default function ChatPage() {
     socket.onclose = () => {
       console.log('[Client] Disconnected from server');
       setConnected(false);
-      setJoined(false);
     };
 
     setWs(socket);
@@ -71,107 +114,66 @@ export default function ChatPage() {
     return () => {
       socket.close();
     };
-  }, []);
+  }, [apiKey]);
 
-  const handleJoin = (e: React.FormEvent) => {
+  const handleCreateRoom = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ws || !username.trim()) return;
+    if (!ws || !newRoomName.trim()) return;
 
-    const joinMessage: ClientMessage = {
-      type: 'join',
-      username: username.trim(),
-      apiKey: apiKey,
+    const createMsg: CreateRoomMessage = {
+      type: 'create_room',
+      roomName: newRoomName.trim(),
+      mode: newRoomMode
     };
 
-    console.log('[Client] Joining as:', username, 'with API key:', apiKey);
-    ws.send(JSON.stringify(joinMessage));
-    setJoined(true);
+    ws.send(JSON.stringify(createMsg));
+    setNewRoomName('');
+    setShowCreateRoom(false);
   };
 
-  const handleMessageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newMessage = e.target.value;
-    setMessage(newMessage);
+  const handleJoinRoom = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ws || !username.trim() || !joinRoomId) return;
 
-    // Check for @ mentions
-    const cursorPos = e.target.selectionStart || 0;
-    const textBeforeCursor = newMessage.slice(0, cursorPos);
-    const atMatch = textBeforeCursor.match(/@(\w*)$/);
+    const joinMsg: JoinRoomMessage = {
+      type: 'join_room',
+      roomId: joinRoomId,
+      username: username.trim(),
+      wallet: wallet.trim() || undefined
+    };
 
-    if (atMatch) {
-      setShowMentionDropdown(true);
-      setMentionFilter(atMatch[1]);
-      setMentionStartPos(cursorPos - atMatch[0].length);
-      setSelectedMentionIndex(0);
-    } else {
-      setShowMentionDropdown(false);
-      setMentionFilter('');
-    }
+    ws.send(JSON.stringify(joinMsg));
+    setCurrentRoom(joinRoomId);
+    setShowJoinRoom(false);
   };
 
-  const handleMentionSelect = (selectedUser: string) => {
-    const beforeMention = message.slice(0, mentionStartPos);
-    const afterMention = message.slice(inputRef.current?.selectionStart || message.length);
-    const newMessage = `${beforeMention}@${selectedUser} ${afterMention}`;
-
-    setMessage(newMessage);
-    setShowMentionDropdown(false);
-    setMentionFilter('');
-
-    // Focus back on input
-    inputRef.current?.focus();
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!showMentionDropdown) return;
-
-    const filteredUsers = users.filter(u =>
-      u.toLowerCase().startsWith(mentionFilter.toLowerCase()) && u !== username
-    );
-
-    // Add "locus" to the list if it matches the filter
-    const allOptions = 'locus'.startsWith(mentionFilter.toLowerCase())
-      ? ['locus', ...filteredUsers]
-      : filteredUsers;
-
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setSelectedMentionIndex((prev) =>
-        prev < allOptions.length - 1 ? prev + 1 : prev
-      );
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setSelectedMentionIndex((prev) => (prev > 0 ? prev - 1 : 0));
-    } else if (e.key === 'Enter' && allOptions.length > 0) {
-      e.preventDefault();
-      handleMentionSelect(allOptions[selectedMentionIndex]);
-    } else if (e.key === 'Escape') {
-      setShowMentionDropdown(false);
-    }
+  const handleSelectRoom = (roomId: string) => {
+    setJoinRoomId(roomId);
+    setShowJoinRoom(true);
   };
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ws || !message.trim()) return;
+    if (!ws || !message.trim() || !currentRoom) return;
 
     const chatMessage: ClientMessage = {
       type: 'chat',
-      text: message.trim(),
+      roomId: currentRoom,
+      text: message.trim()
     };
 
-    console.log('[Client] Sending message:', message);
     ws.send(JSON.stringify(chatMessage));
     setMessage('');
-    setShowMentionDropdown(false);
   };
 
   const formatTime = (timestamp: number) => {
     return new Date(timestamp).toLocaleTimeString('en-US', {
       hour: '2-digit',
-      minute: '2-digit',
+      minute: '2-digit'
     });
   };
 
-  // Parse message text and highlight mentions
+  // Render message with mentions
   const renderMessageWithMentions = (text: string, isOwnMessage: boolean) => {
     const parts = text.split(/(@\w+)/g);
     return (
@@ -201,94 +203,299 @@ export default function ChatPage() {
     );
   };
 
-  // Join screen
-  if (!joined) {
+  // API Key Selection Screen
+  if (!apiKey) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
         <div className="w-full max-w-md p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-xl">
           <h1 className="text-3xl font-bold text-center mb-2 text-gray-900 dark:text-white">
-            LAN Chat
+            SessionPay
           </h1>
           <p className="text-center text-gray-600 dark:text-gray-400 mb-6">
-            {connected ? 'Connected to server' : 'Connecting...'}
+            Select your API key
           </p>
 
-          <form onSubmit={handleJoin} className="space-y-4">
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter your name"
-              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-              disabled={!connected}
-              autoFocus
-            />
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                API Key
-              </label>
-              <select
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value as 'main' | 'sunny')}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                disabled={!connected}
-              >
-                <option value="main">Main API</option>
-                <option value="sunny">Sunny's API</option>
-              </select>
-            </div>
+          <div className="space-y-3">
             <button
-              type="submit"
-              disabled={!connected || !username.trim()}
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
+              onClick={() => setApiKey('main')}
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors"
             >
-              {connected ? 'Join Chat' : 'Connecting...'}
+              Main API
             </button>
-          </form>
+            <button
+              onClick={() => setApiKey('sunny')}
+              className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors"
+            >
+              Sunny's API
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
-  // Chat screen
-  return (
-    <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
-      {/* Sidebar - User List */}
-      <div className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-4">
-        <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
-          Online ({users.length})
-        </h2>
-        <ul className="space-y-2">
-          {users.map((user) => (
-            <li
-              key={user}
-              className="flex items-center gap-2 text-gray-700 dark:text-gray-300"
-            >
-              <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-              {user}
-              {user === username && (
-                <span className="text-xs text-gray-500">(you)</span>
+  // Room Selection Screen
+  if (!currentRoom) {
+    return (
+      <div className="flex min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+        <div className="flex-1 flex items-center justify-center p-8">
+          <div className="w-full max-w-2xl">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
+              <div className="flex items-center justify-between mb-6">
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                  Rooms
+                </h1>
+                <button
+                  onClick={() => setShowCreateRoom(true)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors"
+                >
+                  + Create Room
+                </button>
+              </div>
+
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Connected with: {apiKey === 'main' ? 'Main API' : "Sunny's API"}
+              </p>
+
+              {connected ? (
+                rooms.length > 0 ? (
+                  <div className="space-y-3">
+                    {rooms.map((room) => (
+                      <button
+                        key={room.roomId}
+                        onClick={() => handleSelectRoom(room.roomId)}
+                        className="w-full p-4 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors text-left"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="font-semibold text-gray-900 dark:text-white">
+                              {room.roomName}
+                            </h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              {room.mode === 'poker' && '🎲 Poker'}
+                              {room.mode === 'trip' && '✈️ Trip'}
+                              {room.mode === 'casual' && '💬 Casual'} • {room.participantCount} participants
+                            </p>
+                          </div>
+                          <span className="text-indigo-600 dark:text-indigo-400">→</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <p className="text-gray-600 dark:text-gray-400 mb-4">
+                      No rooms yet. Create one to get started!
+                    </p>
+                  </div>
+                )
+              ) : (
+                <div className="text-center py-12">
+                  <p className="text-gray-600 dark:text-gray-400">Connecting...</p>
+                </div>
               )}
-            </li>
+            </div>
+          </div>
+        </div>
+
+        {/* Create Room Modal */}
+        {showCreateRoom && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-full max-w-md">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                Create Room
+              </h2>
+
+              <form onSubmit={handleCreateRoom} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Room Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newRoomName}
+                    onChange={(e) => setNewRoomName(e.target.value)}
+                    placeholder="e.g., Poker Night"
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                    autoFocus
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Mode
+                  </label>
+                  <select
+                    value={newRoomMode}
+                    onChange={(e) => setNewRoomMode(e.target.value as RoomMode)}
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                  >
+                    <option value="casual">💬 Casual</option>
+                    <option value="poker">🎲 Poker</option>
+                    <option value="trip">✈️ Trip</option>
+                  </select>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateRoom(false)}
+                    className="flex-1 py-3 bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white font-semibold rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!newRoomName.trim()}
+                    className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
+                  >
+                    Create
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Join Room Modal */}
+        {showJoinRoom && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-full max-w-md">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                Join Room
+              </h2>
+
+              <form onSubmit={handleJoinRoom} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Your Name
+                  </label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="e.g., Alissa"
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                    autoFocus
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Wallet Address (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={wallet}
+                    onChange={(e) => setWallet(e.target.value)}
+                    placeholder="0x..."
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowJoinRoom(false)}
+                    className="flex-1 py-3 bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white font-semibold rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!username.trim()}
+                    className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
+                  >
+                    Join
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Chat Screen
+  const currentRoomData = rooms.find((r) => r.roomId === currentRoom);
+  const roomMessages = messages[currentRoom] || [];
+
+  return (
+    <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
+      {/* Sidebar - Room List */}
+      <div className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-4 overflow-y-auto">
+        <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
+          Rooms
+        </h2>
+        <div className="space-y-2 mb-4">
+          {rooms.map((room) => (
+            <button
+              key={room.roomId}
+              onClick={() => {
+                setCurrentRoom(room.roomId);
+                // Auto-rejoin if not in room
+                if (!username) {
+                  setJoinRoomId(room.roomId);
+                  setShowJoinRoom(true);
+                }
+              }}
+              className={`w-full text-left p-3 rounded-lg transition-colors ${
+                room.roomId === currentRoom
+                  ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-900 dark:text-indigo-100'
+                  : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+              }`}
+            >
+              <div className="font-medium">{room.roomName}</div>
+              <div className="text-xs opacity-75">
+                {room.mode === 'poker' && '🎲'}
+                {room.mode === 'trip' && '✈️'}
+                {room.mode === 'casual' && '💬'} {room.participantCount} online
+              </div>
+            </button>
           ))}
-        </ul>
+        </div>
+
+        <button
+          onClick={() => setShowCreateRoom(true)}
+          className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors text-sm"
+        >
+          + Create Room
+        </button>
+
+        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <h3 className="text-sm font-semibold mb-2 text-gray-900 dark:text-white">
+            Online ({users.length})
+          </h3>
+          <ul className="space-y-2">
+            {users.map((user) => (
+              <li key={user} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                {user}
+                {user === username && <span className="text-xs text-gray-500">(you)</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4">
+        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 flex-shrink-0">
           <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
-            LAN Group Chat
+            {currentRoomData?.roomName || 'Chat'}
           </h1>
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Connected as {username}
+            {currentRoomData?.mode === 'poker' && '🎲 Poker Mode'}
+            {currentRoomData?.mode === 'trip' && '✈️ Trip Mode'}
+            {currentRoomData?.mode === 'casual' && '💬 Casual Mode'} • {username}
           </p>
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {messages.map((msg, idx) => {
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+          {roomMessages.map((msg, idx) => {
             if (msg.type === 'system') {
               return (
                 <div key={idx} className="text-center">
@@ -306,9 +513,7 @@ export default function ChatPage() {
                     <p className="text-xs font-semibold mb-1 text-purple-600 dark:text-purple-300">
                       🔧 Tool Usage
                     </p>
-                    <p className="text-sm text-gray-700 dark:text-gray-200">
-                      {msg.text}
-                    </p>
+                    <p className="text-sm text-gray-700 dark:text-gray-200">{msg.text}</p>
                   </div>
                 </div>
               );
@@ -321,17 +526,12 @@ export default function ChatPage() {
                     <p className="text-xs font-semibold mb-1 text-purple-700 dark:text-purple-300">
                       🤖 Locus Agent
                     </p>
-                    <div className="break-words text-gray-900 dark:text-white prose prose-sm max-w-none dark:prose-invert prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {msg.text}
-                      </ReactMarkdown>
+                    <div className="break-words text-gray-900 dark:text-white prose prose-sm max-w-none dark:prose-invert">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
                     </div>
                     {msg.timestamp && (
                       <p className="text-xs mt-1 text-purple-600 dark:text-purple-400">
                         {formatTime(msg.timestamp)}
-                        {msg.tool_uses && msg.tool_uses.length > 0 && (
-                          <span className="ml-2">• {msg.tool_uses.length} tool{msg.tool_uses.length > 1 ? 's' : ''} used</span>
-                        )}
                       </p>
                     )}
                   </div>
@@ -342,10 +542,7 @@ export default function ChatPage() {
             if (msg.type === 'chat') {
               const isOwn = msg.username === username;
               return (
-                <div
-                  key={idx}
-                  className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
-                >
+                <div key={idx} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
                   <div
                     className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
                       isOwn
@@ -358,15 +555,11 @@ export default function ChatPage() {
                         {msg.username}
                       </p>
                     )}
-                    <p className="break-words">
-                      {renderMessageWithMentions(msg.text, isOwn)}
-                    </p>
+                    <p className="break-words">{renderMessageWithMentions(msg.text, isOwn)}</p>
                     {msg.timestamp && (
                       <p
                         className={`text-xs mt-1 ${
-                          isOwn
-                            ? 'text-indigo-200'
-                            : 'text-gray-500 dark:text-gray-400'
+                          isOwn ? 'text-indigo-200' : 'text-gray-500 dark:text-gray-400'
                         }`}
                       >
                         {formatTime(msg.timestamp)}
@@ -389,9 +582,18 @@ export default function ChatPage() {
                 </p>
                 <div className="flex items-center gap-1">
                   <div className="flex gap-1">
-                    <span className="w-2 h-2 bg-purple-600 dark:bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                    <span className="w-2 h-2 bg-purple-600 dark:bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                    <span className="w-2 h-2 bg-purple-600 dark:bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                    <span
+                      className="w-2 h-2 bg-purple-600 dark:bg-purple-400 rounded-full animate-bounce"
+                      style={{ animationDelay: '0ms' }}
+                    ></span>
+                    <span
+                      className="w-2 h-2 bg-purple-600 dark:bg-purple-400 rounded-full animate-bounce"
+                      style={{ animationDelay: '150ms' }}
+                    ></span>
+                    <span
+                      className="w-2 h-2 bg-purple-600 dark:bg-purple-400 rounded-full animate-bounce"
+                      style={{ animationDelay: '300ms' }}
+                    ></span>
                   </div>
                 </div>
               </div>
@@ -402,57 +604,17 @@ export default function ChatPage() {
         </div>
 
         {/* Input */}
-        <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 relative">
-          {/* Mention Dropdown */}
-          {showMentionDropdown && (() => {
-            const filteredUsers = users.filter(u =>
-              u.toLowerCase().startsWith(mentionFilter.toLowerCase()) && u !== username
-            );
-
-            // Add "locus" to the list if it matches the filter
-            const allOptions = 'locus'.startsWith(mentionFilter.toLowerCase())
-              ? ['locus', ...filteredUsers]
-              : filteredUsers;
-
-            return allOptions.length > 0 ? (
-              <div className="absolute bottom-full left-4 right-4 mb-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                {allOptions.map((user, idx) => (
-                  <button
-                    key={user}
-                    type="button"
-                    onClick={() => handleMentionSelect(user)}
-                    className={`w-full text-left px-4 py-2 hover:bg-indigo-100 dark:hover:bg-indigo-900 ${
-                      idx === selectedMentionIndex
-                        ? 'bg-indigo-50 dark:bg-indigo-800'
-                        : ''
-                    } ${user === 'locus' ? 'border-b border-purple-200 dark:border-purple-700' : ''}`}
-                  >
-                    {user === 'locus' ? (
-                      <span className="text-purple-600 dark:text-purple-300 font-semibold">
-                        🤖 @{user}
-                      </span>
-                    ) : (
-                      <span className="text-gray-900 dark:text-white">@{user}</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            ) : null;
-          })()}
-
+        <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 flex-shrink-0">
           <form onSubmit={handleSendMessage} className="flex gap-2">
-            <div className="flex-1 relative">
-              <input
-                ref={inputRef}
-                type="text"
-                value={message}
-                onChange={handleMessageChange}
-                onKeyDown={handleKeyDown}
-                placeholder="Type a message... (use @ to mention)"
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                autoFocus
-              />
-            </div>
+            <input
+              ref={inputRef}
+              type="text"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Type a message... (use @locus for agent)"
+              className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+              autoFocus
+            />
             <button
               type="submit"
               disabled={!message.trim()}

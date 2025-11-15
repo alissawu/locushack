@@ -62,7 +62,14 @@ export class LocusAgent {
     userMessage: string,
     chatHistory: ChatMessage[],
     onProgress: (toolName: string, elapsed: number) => void,
-    onResponse: (text: string, toolsUsed: string[]) => void
+    onResponse: (text: string, toolsUsed: string[]) => void,
+    roomContext?: {
+      roomName: string;
+      mode: string;
+      participants: any[];
+      contacts: Record<string, string>;
+      pokerSession?: any;
+    }
   ): Promise<void> {
     if (this.isRunning) {
       throw new Error('Agent is already processing a request');
@@ -73,7 +80,7 @@ export class LocusAgent {
 
     try {
       // Build system prompt
-      const systemPrompt = `You are a helpful assistant that can help with payments and blockchain transactions.
+      let systemPrompt = `You are a helpful assistant that can help with payments and blockchain transactions.
 Your internal wallet address is ${process.env.WALLET_ADDR}.
 You have access to Locus and SessionPay tools to help users with payments. Be succint in your answers.
 
@@ -82,6 +89,29 @@ IMPORTANT RULES:
 - Transaction history shows activity in a time range, NOT wallet balances
 - If the user asks for balance or net position, use the get_wallet_balance tool separately
 - Never calculate "net" from a subset of transactions - it's misleading`;
+
+      // Add room context if provided
+      if (roomContext) {
+        systemPrompt += `\n\nROOM CONTEXT:
+- Room: "${roomContext.roomName}" (${roomContext.mode} mode)
+- Participants: ${roomContext.participants.map(p => `${p.username}${p.wallet ? ` (${p.wallet})` : ''}`).join(', ')}`;
+
+        if (Object.keys(roomContext.contacts).length > 0) {
+          systemPrompt += `\n- Saved Contacts: ${Object.entries(roomContext.contacts).map(([name, wallet]) => `${name}: ${wallet}`).join(', ')}`;
+        }
+
+        if (roomContext.pokerSession) {
+          systemPrompt += `\n- Poker Session Active:
+  Host: ${roomContext.pokerSession.host}
+  Pot: $${roomContext.pokerSession.pot}
+  Cash Out Ledger: ${roomContext.pokerSession.cashOutLedger.map((entry: any) => `${entry.player}: $${entry.amount}`).join(', ')}`;
+        }
+
+        systemPrompt += `\n\nCONTACT MANAGEMENT:
+- When users say "I'm [name], my wallet is [address]" or similar, remember this information
+- When users say "send to [name]", resolve the name to the wallet address from participants or contacts
+- You can naturally learn and store contact information from conversation`;
+      }
 
       // Build context from chat history
       const context = this.buildContext(chatHistory);
