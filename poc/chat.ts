@@ -7,7 +7,7 @@ import { randomUUID } from 'crypto';
 async function main(): Promise<void> {
   console.log('🎯 Starting Locus Interactive Chat...\n');
 
-  // Configure MCP connection to Locus
+  // Configure MCP connections
   const mcpServers = {
     'locus': {
       type: 'http' as const,
@@ -15,20 +15,26 @@ async function main(): Promise<void> {
       headers: {
         'Authorization': `Bearer ${process.env.LOCUS_API_KEY}`
       }
+    },
+    'sessionpay': {
+      type: 'stdio' as const,
+      command: 'node',
+      args: ['../sessionpay-mcp/build/index.js']
     }
   };
 
   const options = {
     mcpServers,
     allowedTools: [
-      'mcp__locus__*',      // Allow all Locus tools
+      'mcp__locus__*',          // Allow all Locus tools
+      'mcp__sessionpay__*',     // Allow all SessionPay MCP tools
       'mcp__list_resources',
       'mcp__read_resource'
     ],
     apiKey: process.env.ANTHROPIC_API_KEY,
-    // Auto-approve Locus tool usage
+    // Auto-approve Locus and SessionPay tool usage
     canUseTool: async (toolName: string, input: Record<string, unknown>) => {
-      if (toolName.startsWith('mcp__locus__')) {
+      if (toolName.startsWith('mcp__locus__') || toolName.startsWith('mcp__sessionpay__')) {
         return {
           behavior: 'allow' as const,
           updatedInput: input
@@ -36,7 +42,7 @@ async function main(): Promise<void> {
       }
       return {
         behavior: 'deny' as const,
-        message: 'Only Locus tools are allowed'
+        message: 'Only Locus and SessionPay tools are allowed'
       };
     }
   };
