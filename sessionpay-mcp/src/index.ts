@@ -11,12 +11,13 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Base RPC provider, Base link, Base MCP link, Base Mainnet 
-const BASE_RPC_URL = 'https://mainnet.base.org';
-const USDC_ADDRESS = process.env.USDC_CONTRACT_ADDRESS!;  // ! disables typescript warning - trust that this string must always exist
+// Base RPC provider (with fallback defaults)
+const BASE_RPC_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
+const USDC_ADDRESS = process.env.USDC_CONTRACT_ADDRESS || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 
-// USDC ABI - just the Transfer event we need
+// USDC ABI - functions and events we need
 const USDC_ABI = [
+  'function balanceOf(address) view returns (uint256)',
   'event Transfer(address indexed from, address indexed to, uint256 value)',
 ];
 
@@ -64,7 +65,7 @@ class SessionPayMCPServer {
         {
           name: 'get_wallet_transactions',
           description:
-            'Get USDC transaction history for a wallet address on Base blockchain. Returns transfers within a specified date range. Useful for checking what a user has spent or received in a session.',
+            'Get USDC transaction history for a wallet address on Base blockchain. Returns transfers within a specified date range (defaults to last 5 hours). Useful for checking what a user has spent or received in a session.',
           inputSchema: {
             type: 'object',
             properties: {
@@ -74,7 +75,7 @@ class SessionPayMCPServer {
               },
               start_date: {
                 type: 'string',
-                description: 'Start date in YYYY-MM-DD format (optional, defaults to 7 days ago)',
+                description: 'Start date in YYYY-MM-DD format (optional, defaults to 5 hours ago)',
               },
               end_date: {
                 type: 'string',
@@ -262,7 +263,7 @@ class SessionPayMCPServer {
       : now.getTime() / 1000;
     const startTimestamp = start_date
       ? new Date(start_date).getTime() / 1000
-      : (now.getTime() - 7 * 24 * 60 * 60 * 1000) / 1000; // 7 days ago
+      : (now.getTime() - 5 * 60 * 60 * 1000) / 1000; // 5 hours ago (9000 blocks, under 10k limit)
 
     // Get current block
     const currentBlock = await this.provider.getBlockNumber();

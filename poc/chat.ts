@@ -8,6 +8,7 @@ async function main(): Promise<void> {
   console.log('🎯 Starting Locus Interactive Chat...\n');
 
   // Configure MCP connections
+  console.log('📡 Configuring MCP servers...');
   const mcpServers = {
     'locus': {
       type: 'http' as const,
@@ -23,6 +24,8 @@ async function main(): Promise<void> {
     }
   };
 
+  console.log('✓ MCP servers configured:', Object.keys(mcpServers));
+
   const options = {
     mcpServers,
     allowedTools: [
@@ -32,6 +35,9 @@ async function main(): Promise<void> {
       'mcp__read_resource'
     ],
     apiKey: process.env.ANTHROPIC_API_KEY,
+    onToolCall: async (toolName: string) => {
+      console.log(`🔧 Tool called: ${toolName}`);
+    },
     // Auto-approve Locus and SessionPay tool usage
     canUseTool: async (toolName: string, input: Record<string, unknown>) => {
       if (toolName.startsWith('mcp__locus__') || toolName.startsWith('mcp__sessionpay__')) {
@@ -93,6 +99,7 @@ async function main(): Promise<void> {
 
   console.log('💬 Chat started! Type your messages below.');
   console.log('   Commands: "exit" or "quit" to end the session\n');
+  console.log('📋 Ask "list available tools" to see what the agent can do\n');
 
   // Handle agent responses
   try {
