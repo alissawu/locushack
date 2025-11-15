@@ -8,7 +8,27 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { ethers } from 'ethers';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// File logger (since stdout is used for MCP protocol)
+const LOG_FILE = path.resolve(__dirname, '../sessionpay-mcp.log');
+function log(message: string, data?: any) {
+  const timestamp = new Date().toISOString();
+  const logLine = data
+    ? `${timestamp} - ${message} ${JSON.stringify(data)}\n`
+    : `${timestamp} - ${message}\n`;
+  fs.appendFileSync(LOG_FILE, logLine);
+}
+
+// Load env vars regardless of where the process is spawned from
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
+dotenv.config({ path: path.resolve(__dirname, '../../.env.local') });
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 dotenv.config();
 
 // Base RPC provider (with fallback defaults)
@@ -68,7 +88,7 @@ class SessionPayMCPServer {
         {
           name: 'get_wallet_transactions',
           description:
-            'Get complete USDC transaction history for a wallet address on Base blockchain. Returns all transfers within a specified date range (defaults to full history). Useful for checking what a user has spent or received.',
+            'Get complete USDC transaction history for a wallet address on Base blockchain. Returns all transfers going back a specified time period (defaults to last 5 hours = 18000 seconds). Useful for checking what a user has spent or received.',
           inputSchema: {
             type: 'object',
             properties: {
@@ -76,13 +96,9 @@ class SessionPayMCPServer {
                 type: 'string',
                 description: 'The Ethereum wallet address (0x...)',
               },
-              start_date: {
-                type: 'string',
-                description: 'Start date in YYYY-MM-DD format (optional, defaults to all history)',
-              },
-              end_date: {
-                type: 'string',
-                description: 'End date in YYYY-MM-DD format (optional, defaults to today)',
+              lookback_seconds: {
+                type: 'number',
+                description: 'How many seconds to look back in time. Defaults to 18000 (5 hours). Examples: 1 hour = 3600, 1 day = 86400, 1 week = 604800.',
               },
               limit: {
                 type: 'number',
@@ -252,42 +268,118 @@ class SessionPayMCPServer {
     };
   }
 
+  private async getBlockNumberForTimestamp(
+    timestamp: number,
+    closest: 'before' | 'after' = 'before'
+  ): Promise<number> {
+    const params = new URLSearchParams({
+      chainid: BASE_CHAIN_ID,
+      module: 'block',
+      action: 'getblocknobytime',
+      timestamp: Math.floor(timestamp).toString(),
+      closest,
+      apikey: BASESCAN_API_KEY,
+    });
+
+    const response = await fetch(`${BASESCAN_API_URL}?${params.toString()}`);
+    const data = await response.json();
+
+    if (data.status !== '1') {
+      const errorMsg = data.result || data.message || 'API error';
+      throw new Error(`Failed to resolve block number for timestamp ${timestamp}: ${errorMsg}`);
+    }
+
+    const result = data.result;
+    if (typeof result === 'object' && result !== null) {
+      const value =
+        (result as any).blockNumber ??
+        (result as any).BlockNumber ??
+        (result as any).number ??
+        (result as any).result;
+      if (value) {
+        return parseInt(value, 10);
+      }
+    }
+
+    return parseInt(result as string, 10);
+  }
+
   private async getWalletTransactions(args: any) {
-    const { wallet_address, start_date, end_date, limit = 50 } = args;
+    const { wallet_address, lookback_seconds = 18000, limit = 50 } = args; // Default: 5 hours
 
     if (!ethers.isAddress(wallet_address)) {
       throw new Error('Invalid wallet address');
     }
 
-    if (!BASESCAN_API_KEY) {
-      throw new Error('BASESCAN_API_KEY environment variable is required');
-    }
-
-    // Parse dates
+    // Calculate timestamps
     const now = new Date();
-    const endTimestamp = end_date
-      ? new Date(end_date).getTime() / 1000
-      : now.getTime() / 1000;
-    const startTimestamp = start_date
-      ? new Date(start_date).getTime() / 1000
-      : 0; // No default limit - get full history
+    const endTimestamp = now.getTime() / 1000;
+    const startTimestamp = endTimestamp - lookback_seconds;
 
-    // Call Etherscan V2 API for token transfers (works across all chains including Base)
-    const url = `${BASESCAN_API_URL}?chainid=${BASE_CHAIN_ID}&module=account&action=tokentx&contractaddress=${USDC_ADDRESS}&address=${wallet_address}&sort=desc&apikey=${BASESCAN_API_KEY}`;
+    // Try BaseScan API first (fast, indexed)
+    if (BASESCAN_API_KEY) {
+      try {
+        // Query ALL transactions for this wallet (no block range filtering)
+        // BaseScan's pre-indexed database can handle this efficiently
+        const fetchSize = Math.min(Math.max(limit * 2, 100), 10000);
 
-    const response = await fetch(url);
-    const data = await response.json();
+        log(`[SessionPay MCP] 🌐 BaseScan query for ${wallet_address} (all time, will filter by timestamp)`);
+        const params = new URLSearchParams({
+          chainid: BASE_CHAIN_ID,
+          module: 'account',
+          action: 'tokentx',
+          contractaddress: USDC_ADDRESS,
+          address: wallet_address,
+          page: '1',
+          offset: fetchSize.toString(),
+          sort: 'desc',
+          apikey: BASESCAN_API_KEY,
+        });
 
-    if (data.status !== '1') {
-      // Graceful error handling - API might be temporarily down
-      const errorMsg = data.result || data.message || 'API error';
-      throw new Error(`Etherscan API temporarily unavailable: ${errorMsg}. This is usually due to high network activity on the free tier. Please try again in a few minutes.`);
+        const url = `${BASESCAN_API_URL}?${params.toString()}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        log(`[SessionPay MCP] 📡 BaseScan API response:`, {
+          status: data.status,
+          message: data.message,
+          resultCount: Array.isArray(data.result) ? data.result.length : 'N/A'
+        });
+
+        if (data.status === '1') {
+          // BaseScan API succeeded - use it
+          log(`[SessionPay MCP] ✅ BaseScan API succeeded - using indexed data`);
+          return await this.processBaseScanTransactions(data.result, wallet_address, startTimestamp, endTimestamp, limit);
+        } else {
+          log(`[SessionPay MCP] ⚠️  BaseScan API failed:`, {
+            message: data.message,
+            result: data.result
+          });
+        }
+      } catch (error) {
+        log(`[SessionPay MCP] ❌ BaseScan API exception:`, {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    } else {
+      log('[SessionPay MCP] ⚠️  No BASESCAN_API_KEY configured, using RPC');
     }
 
-    // Process transactions
+    // Fallback to RPC provider (slower but reliable)
+    log('[SessionPay MCP] 🔄 Using RPC fallback for transaction history (limited to recent blocks)');
+    return await this.getTransactionsViaRPC(wallet_address, startTimestamp, endTimestamp, limit);
+  }
+
+  private async processBaseScanTransactions(
+    results: any[],
+    wallet_address: string,
+    startTimestamp: number,
+    endTimestamp: number,
+    limit: number
+  ) {
     const transactions: Transaction[] = [];
 
-    for (const tx of data.result) {
+    for (const tx of results) {
       const timestamp = parseInt(tx.timeStamp);
 
       // Filter by date range
@@ -310,10 +402,90 @@ class SessionPayMCPServer {
       });
     }
 
-    // Limit results
+    return this.formatTransactionResponse(wallet_address, transactions, startTimestamp, endTimestamp, limit);
+  }
+
+  private async getTransactionsViaRPC(
+    wallet_address: string,
+    startTimestamp: number,
+    endTimestamp: number,
+    limit: number
+  ) {
+    // Query recent blocks only (last 100,000 blocks = ~2 weeks on Base)
+    const currentBlock = await this.provider.getBlockNumber();
+    const fromBlock = Math.max(0, currentBlock - 100000);
+
+    const transferTopic = ethers.id('Transfer(address,address,uint256)');
+    const addressTopic = ethers.zeroPadValue(wallet_address.toLowerCase(), 32);
+
+    // Query logs for transfers involving this wallet
+    const [sentLogs, receivedLogs] = await Promise.all([
+      // Transfers FROM this wallet
+      this.provider.getLogs({
+        address: USDC_ADDRESS,
+        topics: [transferTopic, addressTopic, null],
+        fromBlock,
+        toBlock: 'latest',
+      }),
+      // Transfers TO this wallet
+      this.provider.getLogs({
+        address: USDC_ADDRESS,
+        topics: [transferTopic, null, addressTopic],
+        fromBlock,
+        toBlock: 'latest',
+      }),
+    ]);
+
+    const transactions: Transaction[] = [];
+    const processedHashes = new Set<string>();
+
+    // Process all logs
+    for (const log of [...sentLogs, ...receivedLogs]) {
+      if (processedHashes.has(log.transactionHash)) continue;
+      processedHashes.add(log.transactionHash);
+
+      const block = await this.provider.getBlock(log.blockNumber);
+      if (!block) continue;
+
+      const timestamp = block.timestamp;
+      if (timestamp < startTimestamp || timestamp > endTimestamp) continue;
+
+      const from = ethers.getAddress('0x' + log.topics[1].slice(26));
+      const to = ethers.getAddress('0x' + log.topics[2].slice(26));
+      const value = ethers.toBigInt(log.data);
+      const valueUSDC = ethers.formatUnits(value, 6);
+
+      const isReceived = to.toLowerCase() === wallet_address.toLowerCase();
+
+      transactions.push({
+        hash: log.transactionHash,
+        from,
+        to,
+        value: value.toString(),
+        valueUSDC,
+        timestamp,
+        date: new Date(timestamp * 1000).toISOString(),
+        blockNumber: log.blockNumber,
+        type: isReceived ? 'received' : 'sent',
+      });
+    }
+
+    // Sort by block number descending
+    transactions.sort((a, b) => b.blockNumber - a.blockNumber);
+
+    return this.formatTransactionResponse(wallet_address, transactions, startTimestamp, endTimestamp, limit, true);
+  }
+
+  private formatTransactionResponse(
+    wallet_address: string,
+    transactions: Transaction[],
+    startTimestamp: number,
+    endTimestamp: number,
+    limit: number,
+    isRPCFallback: boolean = false
+  ) {
     const limitedTransactions = transactions.slice(0, limit);
 
-    // Calculate summary
     const totalSent = transactions
       .filter((tx) => tx.type === 'sent')
       .reduce((sum, tx) => sum + parseFloat(tx.valueUSDC), 0);
@@ -341,6 +513,7 @@ class SessionPayMCPServer {
               },
               transactions: limitedTransactions,
               network: 'Base Mainnet',
+              note: isRPCFallback ? 'Data retrieved via RPC (recent blocks only due to API rate limits)' : undefined,
             },
             null,
             2

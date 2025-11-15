@@ -3,8 +3,10 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { ClientMessage, ServerMessage, ChatMessage, SystemMessage, AgentMessage, AgentProgressMessage, AgentTypingMessage } from '../shared/types';
 import { LocusAgent } from './agent';
 
-// Load .env.local explicitly
+// Load from application/.env.local first, fallback to root
 config({ path: '.env.local' });
+config({ path: '../.env.local' });
+config({ path: '../.env' });
 
 // Verify env vars loaded
 console.log('[Server] Environment check:', {

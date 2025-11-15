@@ -1,4 +1,9 @@
-import 'dotenv/config';
+import { config } from 'dotenv';
+
+// Load from poc/.env first, fallback to root
+config({ path: '.env' });
+config({ path: '../.env.local' });
+config({ path: '../.env' });
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
 async function main(): Promise<void> {

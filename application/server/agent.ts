@@ -1,5 +1,10 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import type { ChatMessage } from '../shared/types';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const sessionPayServerPath = path.resolve(__dirname, '../../sessionpay-mcp/build/index.js');
 
 export class LocusAgent {
   private isRunning = false;
@@ -22,7 +27,7 @@ export class LocusAgent {
         'sessionpay': {
           type: 'stdio' as const,
           command: 'node',
-          args: ['../sessionpay-mcp/build/index.js']
+          args: [sessionPayServerPath]
         }
       },
       allowedTools: [
@@ -32,14 +37,19 @@ export class LocusAgent {
         'mcp__read_resource'
       ],
       apiKey: this.anthropicApiKey,
+      onToolCall: async (toolName: string) => {
+        console.log(`[Agent] 🔧 TOOL INVOKED: ${toolName} at ${new Date().toISOString()}`);
+      },
       canUseTool: async (toolName: string, input: any) => {
         if (toolName.startsWith('mcp__locus__') || toolName.startsWith('mcp__sessionpay__') || toolName.startsWith('mcp__')) {
-          console.log(`[Agent] Approving tool: ${toolName}`);
+          console.log(`[Agent] ✅ Approving tool: ${toolName}`);
+          console.log(`[Agent] 📥 Tool input:`, JSON.stringify(input, null, 2));
           return {
             behavior: 'allow' as const,
             updatedInput: input
           };
         }
+        console.log(`[Agent] ❌ Denying tool: ${toolName}`);
         return {
           behavior: 'deny' as const,
           message: 'Only Locus and SessionPay MCP tools are allowed'
@@ -107,9 +117,9 @@ You have access to Locus and SessionPay tools to help users with payments. Be su
           }
         } else if (message.type === 'assistant') {
           // Extract text response
-          const textBlocks = message.message.content.filter(b => b.type === 'text');
+          const textBlocks = message.message.content.filter((b: any) => b.type === 'text');
           if (textBlocks.length > 0) {
-            const text = textBlocks.map(b => (b as any).text).join('\n');
+            const text = textBlocks.map((b: any) => (b as any).text).join('\n');
             if (text.trim()) {
               responseParts.push(text);
               console.log(`[Agent] Response part received: ${text.substring(0, 100)}...`);
@@ -117,7 +127,7 @@ You have access to Locus and SessionPay tools to help users with payments. Be su
           }
 
           // Track and emit tool uses
-          const toolBlocks = message.message.content.filter(b => b.type === 'tool_use');
+          const toolBlocks = message.message.content.filter((b: any) => b.type === 'tool_use');
           for (const tool of toolBlocks) {
             const toolName = (tool as any).name;
             console.log(`[Agent] Tool use detected: ${toolName}`);
