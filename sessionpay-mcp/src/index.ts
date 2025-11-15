@@ -14,6 +14,9 @@ dotenv.config();
 // Base RPC provider (with fallback defaults)
 const BASE_RPC_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
 const USDC_ADDRESS = process.env.USDC_CONTRACT_ADDRESS || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+const BASESCAN_API_KEY = process.env.BASESCAN_API_KEY || '';
+const BASESCAN_API_URL = 'https://api.etherscan.io/v2/api'; // V2 unified endpoint
+const BASE_CHAIN_ID = '8453'; // Base Mainnet
 
 // USDC ABI - functions and events we need
 const USDC_ABI = [
@@ -65,7 +68,7 @@ class SessionPayMCPServer {
         {
           name: 'get_wallet_transactions',
           description:
-            'Get USDC transaction history for a wallet address on Base blockchain. Returns transfers within a specified date range (defaults to last 5 hours). Useful for checking what a user has spent or received in a session.',
+            'Get complete USDC transaction history for a wallet address on Base blockchain. Returns all transfers within a specified date range (defaults to full history). Useful for checking what a user has spent or received.',
           inputSchema: {
             type: 'object',
             properties: {
@@ -75,7 +78,7 @@ class SessionPayMCPServer {
               },
               start_date: {
                 type: 'string',
-                description: 'Start date in YYYY-MM-DD format (optional, defaults to 5 hours ago)',
+                description: 'Start date in YYYY-MM-DD format (optional, defaults to all history)',
               },
               end_date: {
                 type: 'string',
@@ -256,6 +259,10 @@ class SessionPayMCPServer {
       throw new Error('Invalid wallet address');
     }
 
+    if (!BASESCAN_API_KEY) {
+      throw new Error('BASESCAN_API_KEY environment variable is required');
+    }
+
     // Parse dates
     const now = new Date();
     const endTimestamp = end_date
@@ -263,70 +270,47 @@ class SessionPayMCPServer {
       : now.getTime() / 1000;
     const startTimestamp = start_date
       ? new Date(start_date).getTime() / 1000
-      : (now.getTime() - 5 * 60 * 60 * 1000) / 1000; // 5 hours ago (9000 blocks, under 10k limit)
+      : 0; // No default limit - get full history
 
-    // Get current block
-    const currentBlock = await this.provider.getBlockNumber();
+    // Call Etherscan V2 API for token transfers (works across all chains including Base)
+    const url = `${BASESCAN_API_URL}?chainid=${BASE_CHAIN_ID}&module=account&action=tokentx&contractaddress=${USDC_ADDRESS}&address=${wallet_address}&sort=desc&apikey=${BASESCAN_API_KEY}`;
 
-    // Estimate blocks (Base: ~2 second block time)
-    const blocksPerDay = (24 * 60 * 60) / 2;
-    const daysBack = (now.getTime() / 1000 - startTimestamp) / (24 * 60 * 60);
-    const fromBlock = Math.max(0, currentBlock - Math.ceil(daysBack * blocksPerDay));
+    const response = await fetch(url);
+    const data = await response.json();
 
-    // Query Transfer events
-    const sentFilter = this.usdcContract.filters.Transfer(wallet_address, null);
-    const receivedFilter = this.usdcContract.filters.Transfer(null, wallet_address);
-
-    const [sentLogs, receivedLogs] = await Promise.all([
-      this.usdcContract.queryFilter(sentFilter, fromBlock, currentBlock),
-      this.usdcContract.queryFilter(receivedFilter, fromBlock, currentBlock),
-    ]);
+    if (data.status !== '1') {
+      // Graceful error handling - API might be temporarily down
+      const errorMsg = data.result || data.message || 'API error';
+      throw new Error(`Etherscan API temporarily unavailable: ${errorMsg}. This is usually due to high network activity on the free tier. Please try again in a few minutes.`);
+    }
 
     // Process transactions
     const transactions: Transaction[] = [];
 
-    for (const log of sentLogs) {
-      const block = await log.getBlock();
-      if (block.timestamp >= startTimestamp && block.timestamp <= endTimestamp) {
-        if ('args' in log) {
-          const args = log.args as any;
-          transactions.push({
-            hash: log.transactionHash,
-            from: args[0],
-            to: args[1],
-            value: args[2].toString(),
-            valueUSDC: ethers.formatUnits(args[2], 6),
-            timestamp: block.timestamp,
-            date: new Date(block.timestamp * 1000).toISOString(),
-            blockNumber: log.blockNumber,
-            type: 'sent',
-          });
-        }
+    for (const tx of data.result) {
+      const timestamp = parseInt(tx.timeStamp);
+
+      // Filter by date range
+      if (timestamp < startTimestamp || timestamp > endTimestamp) {
+        continue;
       }
+
+      const isReceived = tx.to.toLowerCase() === wallet_address.toLowerCase();
+
+      transactions.push({
+        hash: tx.hash,
+        from: ethers.getAddress(tx.from),
+        to: ethers.getAddress(tx.to),
+        value: tx.value,
+        valueUSDC: ethers.formatUnits(tx.value, 6),
+        timestamp,
+        date: new Date(timestamp * 1000).toISOString(),
+        blockNumber: parseInt(tx.blockNumber),
+        type: isReceived ? 'received' : 'sent',
+      });
     }
 
-    for (const log of receivedLogs) {
-      const block = await log.getBlock();
-      if (block.timestamp >= startTimestamp && block.timestamp <= endTimestamp) {
-        if ('args' in log) {
-          const args = log.args as any;
-          transactions.push({
-            hash: log.transactionHash,
-            from: args[0],
-            to: args[1],
-            value: args[2].toString(),
-            valueUSDC: ethers.formatUnits(args[2], 6),
-            timestamp: block.timestamp,
-            date: new Date(block.timestamp * 1000).toISOString(),
-            blockNumber: log.blockNumber,
-            type: 'received',
-          });
-        }
-      }
-    }
-
-    // Sort by timestamp (newest first) and limit
-    transactions.sort((a, b) => b.timestamp - a.timestamp);
+    // Limit results
     const limitedTransactions = transactions.slice(0, limit);
 
     // Calculate summary
