@@ -11,7 +11,12 @@ export default function ChatPage() {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<ServerMessage[]>([]);
   const [users, setUsers] = useState<string[]>([]);
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState('');
+  const [mentionStartPos, setMentionStartPos] = useState(0);
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Auto-scroll to bottom of messages
   useEffect(() => {
@@ -76,6 +81,62 @@ export default function ChatPage() {
     setJoined(true);
   };
 
+  const handleMessageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newMessage = e.target.value;
+    setMessage(newMessage);
+
+    // Check for @ mentions
+    const cursorPos = e.target.selectionStart || 0;
+    const textBeforeCursor = newMessage.slice(0, cursorPos);
+    const atMatch = textBeforeCursor.match(/@(\w*)$/);
+
+    if (atMatch) {
+      setShowMentionDropdown(true);
+      setMentionFilter(atMatch[1]);
+      setMentionStartPos(cursorPos - atMatch[0].length);
+      setSelectedMentionIndex(0);
+    } else {
+      setShowMentionDropdown(false);
+      setMentionFilter('');
+    }
+  };
+
+  const handleMentionSelect = (selectedUser: string) => {
+    const beforeMention = message.slice(0, mentionStartPos);
+    const afterMention = message.slice(inputRef.current?.selectionStart || message.length);
+    const newMessage = `${beforeMention}@${selectedUser} ${afterMention}`;
+
+    setMessage(newMessage);
+    setShowMentionDropdown(false);
+    setMentionFilter('');
+
+    // Focus back on input
+    inputRef.current?.focus();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showMentionDropdown) return;
+
+    const filteredUsers = users.filter(u =>
+      u.toLowerCase().includes(mentionFilter.toLowerCase()) && u !== username
+    );
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedMentionIndex((prev) =>
+        prev < filteredUsers.length - 1 ? prev + 1 : prev
+      );
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedMentionIndex((prev) => (prev > 0 ? prev - 1 : 0));
+    } else if (e.key === 'Enter' && filteredUsers.length > 0) {
+      e.preventDefault();
+      handleMentionSelect(filteredUsers[selectedMentionIndex]);
+    } else if (e.key === 'Escape') {
+      setShowMentionDropdown(false);
+    }
+  };
+
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!ws || !message.trim()) return;
@@ -88,6 +149,7 @@ export default function ChatPage() {
     console.log('[Client] Sending message:', message);
     ws.send(JSON.stringify(chatMessage));
     setMessage('');
+    setShowMentionDropdown(false);
   };
 
   const formatTime = (timestamp: number) => {
@@ -95,6 +157,36 @@ export default function ChatPage() {
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  // Parse message text and highlight mentions
+  const renderMessageWithMentions = (text: string, isOwnMessage: boolean) => {
+    const parts = text.split(/(@\w+)/g);
+    return (
+      <>
+        {parts.map((part, idx) => {
+          if (part.match(/^@\w+$/)) {
+            const mentionedUser = part.slice(1);
+            const isMentioningMe = mentionedUser === username;
+            return (
+              <span
+                key={idx}
+                className={`font-semibold ${
+                  isMentioningMe
+                    ? 'bg-yellow-200 dark:bg-yellow-600 px-1 rounded'
+                    : isOwnMessage
+                    ? 'text-indigo-200'
+                    : 'text-indigo-600 dark:text-indigo-400'
+                }`}
+              >
+                {part}
+              </span>
+            );
+          }
+          return <span key={idx}>{part}</span>;
+        })}
+      </>
+    );
   };
 
   // Join screen
@@ -200,7 +292,9 @@ export default function ChatPage() {
                         {msg.username}
                       </p>
                     )}
-                    <p className="break-words">{msg.text}</p>
+                    <p className="break-words">
+                      {renderMessageWithMentions(msg.text, isOwn)}
+                    </p>
                     {msg.timestamp && (
                       <p
                         className={`text-xs mt-1 ${
@@ -223,16 +317,51 @@ export default function ChatPage() {
         </div>
 
         {/* Input */}
-        <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4">
+        <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 relative">
+          {/* Mention Dropdown */}
+          {showMentionDropdown && (() => {
+            const filteredUsers = users.filter(u =>
+              u.toLowerCase().includes(mentionFilter.toLowerCase()) && u !== username
+            );
+
+            return filteredUsers.length > 0 ? (
+              <div className="absolute bottom-full left-4 right-4 mb-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {filteredUsers.map((user, idx) => (
+                  <button
+                    key={user}
+                    type="button"
+                    onClick={() => handleMentionSelect(user)}
+                    className={`w-full text-left px-4 py-2 hover:bg-indigo-100 dark:hover:bg-indigo-900 ${
+                      idx === selectedMentionIndex
+                        ? 'bg-indigo-50 dark:bg-indigo-800'
+                        : ''
+                    }`}
+                  >
+                    <span className="text-gray-900 dark:text-white">@{user}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null;
+          })()}
+
           <form onSubmit={handleSendMessage} className="flex gap-2">
-            <input
-              type="text"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Type a message..."
-              className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-              autoFocus
-            />
+            <div className="flex-1 relative">
+              <input
+                ref={inputRef}
+                type="text"
+                value={message}
+                onChange={handleMessageChange}
+                onKeyDown={handleKeyDown}
+                placeholder="Type a message... (use @ to mention)"
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white font-semibold"
+                autoFocus
+                style={{
+                  backgroundImage: message.includes('@')
+                    ? `linear-gradient(transparent, transparent)`
+                    : 'none',
+                }}
+              />
+            </div>
             <button
               type="submit"
               disabled={!message.trim()}
