@@ -1,5 +1,5 @@
 {
-  "name": "locushack",
+  "name": "-test",
   "version": "1.0.0",
   "description": "A Locus-powered application using Claude SDK and TypeScript",
   "main": "index.ts",
@@ -7,6 +7,7 @@
   "scripts": {
     "start": "tsx index.ts",
     "dev": "tsx watch index.ts",
+    "chat": "tsx chat.ts",
     "build": "tsc",
     "type-check": "tsc --noEmit"
   },
