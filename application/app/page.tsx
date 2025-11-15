@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { ClientMessage, ServerMessage } from '@/shared/types';
 
 export default function ChatPage() {
@@ -15,6 +17,7 @@ export default function ChatPage() {
   const [mentionFilter, setMentionFilter] = useState('');
   const [mentionStartPos, setMentionStartPos] = useState(0);
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
+  const [agentTyping, setAgentTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -42,6 +45,8 @@ export default function ChatPage() {
 
         if (data.type === 'user_list') {
           setUsers(data.users);
+        } else if (data.type === 'agent_typing') {
+          setAgentTyping(data.isTyping);
         } else {
           setMessages((prev) => [...prev, data]);
         }
@@ -118,20 +123,25 @@ export default function ChatPage() {
     if (!showMentionDropdown) return;
 
     const filteredUsers = users.filter(u =>
-      u.toLowerCase().includes(mentionFilter.toLowerCase()) && u !== username
+      u.toLowerCase().startsWith(mentionFilter.toLowerCase()) && u !== username
     );
+
+    // Add "locus" to the list if it matches the filter
+    const allOptions = 'locus'.startsWith(mentionFilter.toLowerCase())
+      ? ['locus', ...filteredUsers]
+      : filteredUsers;
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setSelectedMentionIndex((prev) =>
-        prev < filteredUsers.length - 1 ? prev + 1 : prev
+        prev < allOptions.length - 1 ? prev + 1 : prev
       );
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setSelectedMentionIndex((prev) => (prev > 0 ? prev - 1 : 0));
-    } else if (e.key === 'Enter' && filteredUsers.length > 0) {
+    } else if (e.key === 'Enter' && allOptions.length > 0) {
       e.preventDefault();
-      handleMentionSelect(filteredUsers[selectedMentionIndex]);
+      handleMentionSelect(allOptions[selectedMentionIndex]);
     } else if (e.key === 'Escape') {
       setShowMentionDropdown(false);
     }
@@ -273,6 +283,46 @@ export default function ChatPage() {
               );
             }
 
+            if (msg.type === 'agent_progress') {
+              return (
+                <div key={idx} className="flex justify-start">
+                  <div className="max-w-xs lg:max-w-md px-4 py-2 rounded-2xl bg-purple-50 dark:bg-purple-800 border border-purple-200 dark:border-purple-600">
+                    <p className="text-xs font-semibold mb-1 text-purple-600 dark:text-purple-300">
+                      🔧 Tool Usage
+                    </p>
+                    <p className="text-sm text-gray-700 dark:text-gray-200">
+                      {msg.text}
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+
+            if (msg.type === 'agent') {
+              return (
+                <div key={idx} className="flex justify-start">
+                  <div className="max-w-xs lg:max-w-md px-4 py-2 rounded-2xl bg-purple-100 dark:bg-purple-900 border-2 border-purple-300 dark:border-purple-700">
+                    <p className="text-xs font-semibold mb-1 text-purple-700 dark:text-purple-300">
+                      🤖 Locus Agent
+                    </p>
+                    <div className="break-words text-gray-900 dark:text-white prose prose-sm max-w-none dark:prose-invert prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.text}
+                      </ReactMarkdown>
+                    </div>
+                    {msg.timestamp && (
+                      <p className="text-xs mt-1 text-purple-600 dark:text-purple-400">
+                        {formatTime(msg.timestamp)}
+                        {msg.tool_uses && msg.tool_uses.length > 0 && (
+                          <span className="ml-2">• {msg.tool_uses.length} tool{msg.tool_uses.length > 1 ? 's' : ''} used</span>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
             if (msg.type === 'chat') {
               const isOwn = msg.username === username;
               return (
@@ -313,6 +363,25 @@ export default function ChatPage() {
 
             return null;
           })}
+
+          {/* Agent Typing Indicator */}
+          {agentTyping && (
+            <div className="flex justify-start">
+              <div className="max-w-xs lg:max-w-md px-4 py-3 rounded-2xl bg-purple-100 dark:bg-purple-900 border-2 border-purple-300 dark:border-purple-700">
+                <p className="text-xs font-semibold mb-1 text-purple-700 dark:text-purple-300">
+                  🤖 Locus Agent
+                </p>
+                <div className="flex items-center gap-1">
+                  <div className="flex gap-1">
+                    <span className="w-2 h-2 bg-purple-600 dark:bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                    <span className="w-2 h-2 bg-purple-600 dark:bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                    <span className="w-2 h-2 bg-purple-600 dark:bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
 
@@ -321,12 +390,17 @@ export default function ChatPage() {
           {/* Mention Dropdown */}
           {showMentionDropdown && (() => {
             const filteredUsers = users.filter(u =>
-              u.toLowerCase().includes(mentionFilter.toLowerCase()) && u !== username
+              u.toLowerCase().startsWith(mentionFilter.toLowerCase()) && u !== username
             );
 
-            return filteredUsers.length > 0 ? (
+            // Add "locus" to the list if it matches the filter
+            const allOptions = 'locus'.startsWith(mentionFilter.toLowerCase())
+              ? ['locus', ...filteredUsers]
+              : filteredUsers;
+
+            return allOptions.length > 0 ? (
               <div className="absolute bottom-full left-4 right-4 mb-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                {filteredUsers.map((user, idx) => (
+                {allOptions.map((user, idx) => (
                   <button
                     key={user}
                     type="button"
@@ -335,9 +409,15 @@ export default function ChatPage() {
                       idx === selectedMentionIndex
                         ? 'bg-indigo-50 dark:bg-indigo-800'
                         : ''
-                    }`}
+                    } ${user === 'locus' ? 'border-b border-purple-200 dark:border-purple-700' : ''}`}
                   >
-                    <span className="text-gray-900 dark:text-white">@{user}</span>
+                    {user === 'locus' ? (
+                      <span className="text-purple-600 dark:text-purple-300 font-semibold">
+                        🤖 @{user}
+                      </span>
+                    ) : (
+                      <span className="text-gray-900 dark:text-white">@{user}</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -353,13 +433,8 @@ export default function ChatPage() {
                 onChange={handleMessageChange}
                 onKeyDown={handleKeyDown}
                 placeholder="Type a message... (use @ to mention)"
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white font-semibold"
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
                 autoFocus
-                style={{
-                  backgroundImage: message.includes('@')
-                    ? `linear-gradient(transparent, transparent)`
-                    : 'none',
-                }}
               />
             </div>
             <button

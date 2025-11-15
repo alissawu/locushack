@@ -1,5 +1,16 @@
+import { config } from 'dotenv';
 import { WebSocketServer, WebSocket } from 'ws';
-import type { ClientMessage, ServerMessage, ChatMessage, SystemMessage } from '../shared/types';
+import type { ClientMessage, ServerMessage, ChatMessage, SystemMessage, AgentMessage, AgentProgressMessage, AgentTypingMessage } from '../shared/types';
+import { LocusAgent } from './agent';
+
+// Load .env.local explicitly
+config({ path: '.env.local' });
+
+// Verify env vars loaded
+console.log('[Server] Environment check:', {
+  LOCUS_API_KEY: process.env.LOCUS_API_KEY ? `${process.env.LOCUS_API_KEY.substring(0, 10)}...` : 'MISSING',
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? `${process.env.ANTHROPIC_API_KEY.substring(0, 10)}...` : 'MISSING'
+});
 
 const PORT = 4000;
 const HOST = '0.0.0.0'; // Bind to all network interfaces for LAN access
@@ -10,11 +21,14 @@ interface Client {
 }
 
 const clients = new Map<WebSocket, Client>();
+const chatHistory: ChatMessage[] = [];
+const allMessages: ServerMessage[] = []; // Store all messages for new clients
 
-const wss = new WebSocketServer({
-  port: PORT,
-  host: HOST
-});
+// Initialize Locus agent
+const agent = new LocusAgent(
+  process.env.LOCUS_API_KEY || '',
+  process.env.ANTHROPIC_API_KEY || ''
+);
 
 // Logging utility
 const log = {
@@ -23,6 +37,16 @@ const log = {
   client: (username: string | null, msg: string) =>
     console.log(`[WS Server] ${new Date().toISOString()} - [${username || 'Anonymous'}] ${msg}`)
 };
+
+// Initialize agent MCP connection
+agent.initialize().catch(err => {
+  log.error(`Failed to initialize agent: ${err.message}`);
+});
+
+const wss = new WebSocketServer({
+  port: PORT,
+  host: HOST
+});
 
 // Broadcast message to all connected clients
 function broadcast(message: ServerMessage, excludeWs?: WebSocket) {
@@ -67,12 +91,19 @@ wss.on('connection', (ws: WebSocket) => {
         client.username = message.username;
         log.client(client.username, 'joined the chat');
 
+        // Send all previous messages to the new user
+        log.info(`Sending ${allMessages.length} previous messages to ${client.username}`);
+        allMessages.forEach(msg => {
+          ws.send(JSON.stringify(msg));
+        });
+
         // Send system message to all users
         const systemMessage: SystemMessage = {
           type: 'system',
           text: `${client.username} joined the chat`,
           timestamp: Date.now()
         };
+        allMessages.push(systemMessage);
         broadcast(systemMessage);
 
         // Send updated user list
@@ -94,8 +125,83 @@ wss.on('connection', (ws: WebSocket) => {
           timestamp: Date.now()
         };
 
+        // Store in history
+        chatHistory.push(chatMessage);
+        // Keep only last 50 messages
+        if (chatHistory.length > 50) {
+          chatHistory.shift();
+        }
+
+        // Store in all messages for new users
+        allMessages.push(chatMessage);
+
         // Broadcast to all clients including sender
         broadcast(chatMessage);
+
+        // Check for @locus mention
+        if (message.text.includes('@locus')) {
+          log.info('🤖 Agent triggered by @locus mention');
+
+          // Send typing indicator
+          const typingStart: AgentTypingMessage = {
+            type: 'agent_typing',
+            isTyping: true
+          };
+          broadcast(typingStart);
+
+          // Trigger agent (async, doesn't block)
+          agent.processMessage(
+            message.text,
+            chatHistory,
+            // Progress callback
+            (toolName, elapsed) => {
+              const progressMessage: AgentProgressMessage = {
+                type: 'agent_progress',
+                text: `Using ${toolName.replace('mcp__locus__', '')}...`,
+                tool_name: toolName,
+                elapsed_time: elapsed
+              };
+              allMessages.push(progressMessage);
+              broadcast(progressMessage);
+            },
+            // Response callback
+            (text, toolsUsed) => {
+              // Stop typing indicator
+              const typingEnd: AgentTypingMessage = {
+                type: 'agent_typing',
+                isTyping: false
+              };
+              broadcast(typingEnd);
+
+              const agentResponse: AgentMessage = {
+                type: 'agent',
+                text,
+                timestamp: Date.now(),
+                tool_uses: toolsUsed
+              };
+              allMessages.push(agentResponse);
+              broadcast(agentResponse);
+              log.info(`🤖 Agent response sent (used ${toolsUsed.length} tools)`);
+            }
+          ).catch(err => {
+            log.error(`Agent error: ${err.message}`);
+
+            // Stop typing indicator on error
+            const typingEnd: AgentTypingMessage = {
+              type: 'agent_typing',
+              isTyping: false
+            };
+            broadcast(typingEnd);
+
+            const errorMessage: SystemMessage = {
+              type: 'system',
+              text: '❌ Locus agent encountered an error',
+              timestamp: Date.now()
+            };
+            allMessages.push(errorMessage);
+            broadcast(errorMessage);
+          });
+        }
       }
     } catch (err) {
       log.error(`Failed to parse message: ${err}`);
@@ -115,6 +221,7 @@ wss.on('connection', (ws: WebSocket) => {
         text: `${username} left the chat`,
         timestamp: Date.now()
       };
+      allMessages.push(systemMessage);
       broadcast(systemMessage);
 
       // Send updated user list
