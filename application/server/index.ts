@@ -13,6 +13,7 @@ config({ path: '../.env' });
 console.log('[Server] Environment check:', {
   LOCUS_API_KEY: process.env.LOCUS_API_KEY ? `${process.env.LOCUS_API_KEY.substring(0, 10)}...` : 'MISSING',
   SUNNY_LOCUS_API_KEY: process.env.SUNNY_LOCUS_API_KEY ? `${process.env.SUNNY_LOCUS_API_KEY.substring(0, 10)}...` : 'MISSING',
+  HOST_LOCUS_API_KEY: process.env.HOST_LOCUS_API_KEY ? `${process.env.HOST_LOCUS_API_KEY.substring(0, 10)}...` : 'MISSING',
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? `${process.env.ANTHROPIC_API_KEY.substring(0, 10)}...` : 'MISSING'
 });
 
@@ -21,7 +22,7 @@ const HOST = '0.0.0.0'; // Bind to all network interfaces for LAN access
 
 interface Client {
   ws: WebSocket;
-  apiKey: 'main' | 'sunny';
+  apiKey: 'main' | 'sunny' | 'host';
   currentRoom: string | null;
   username: string | null;
   wallet: string | null;
@@ -50,9 +51,13 @@ const agents = {
   sunny: new LocusAgent(
     process.env.SUNNY_LOCUS_API_KEY || '',
     process.env.ANTHROPIC_API_KEY || ''
+  ),
+  host: new LocusAgent(
+    process.env.HOST_LOCUS_API_KEY || '',
+    process.env.ANTHROPIC_API_KEY || ''
   )
 };
-log.info('Agents initialized (main + sunny)');
+log.info('Agents initialized (main + sunny + host)');
 
 const wss = new WebSocketServer({
   port: PORT,
@@ -88,6 +93,25 @@ function sendRoomList(ws: WebSocket) {
   ws.send(JSON.stringify(roomList));
 }
 
+// Broadcast room list to all connected clients
+function sendRoomListToAll() {
+  const roomList: RoomListMessage = {
+    type: 'room_list',
+    rooms: Array.from(rooms.values()).map(room => ({
+      roomId: room.roomId,
+      roomName: room.roomName,
+      mode: room.mode,
+      participantCount: room.participants.length
+    }))
+  };
+  const payload = JSON.stringify(roomList);
+  clients.forEach((_, ws) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(payload);
+    }
+  });
+}
+
 // Send user list to all clients in a room
 function sendUserListToRoom(roomId: string) {
   const room = rooms.get(roomId);
@@ -99,6 +123,126 @@ function sendUserListToRoom(roomId: string) {
     type: 'user_list',
     users
   });
+}
+
+// Poker session helpers
+function recordBuyIn(roomId: string, player: string, amount: number): string {
+  const room = rooms.get(roomId);
+  if (!room) return 'Room not found';
+
+  if (!room.pokerSession) {
+    // Auto-create poker session on first buy-in
+    room.pokerSession = {
+      host: player, // First person to buy in becomes host
+      buyIns: [],
+      cashOuts: []
+    };
+  }
+
+  room.pokerSession.buyIns.push({
+    player,
+    amount,
+    timestamp: Date.now()
+  });
+
+  const totalPot = room.pokerSession.buyIns.reduce((sum, bi) => sum + bi.amount, 0);
+  return `Recorded: ${player} bought in for $${amount}. Total pot: $${totalPot}`;
+}
+
+function recordCashOut(roomId: string, player: string, amount: number): string {
+  const room = rooms.get(roomId);
+  if (!room || !room.pokerSession) {
+    return 'No poker session active. Start by recording a buy-in first.';
+  }
+
+  room.pokerSession.cashOuts.push({
+    player,
+    amount,
+    timestamp: Date.now()
+  });
+
+  return `Recorded: ${player} cashing out $${amount}`;
+}
+
+function getPokerLedger(roomId: string): string {
+  const room = rooms.get(roomId);
+  if (!room || !room.pokerSession) {
+    return 'No poker session active.';
+  }
+
+  const session = room.pokerSession;
+  const totalBuyIns = session.buyIns.reduce((sum, bi) => sum + bi.amount, 0);
+  const totalCashOuts = session.cashOuts.reduce((sum, co) => sum + co.amount, 0);
+
+  let ledger = `**Poker Session Ledger**\n\n`;
+  ledger += `**Buy-ins:**\n`;
+  session.buyIns.forEach(bi => {
+    ledger += `- ${bi.player}: $${bi.amount}\n`;
+  });
+  ledger += `Total: $${totalBuyIns}\n\n`;
+
+  ledger += `**Cash Outs:**\n`;
+  if (session.cashOuts.length === 0) {
+    ledger += `- None yet\n`;
+  } else {
+    session.cashOuts.forEach(co => {
+      ledger += `- ${co.player}: $${co.amount}\n`;
+    });
+  }
+  ledger += `Total: $${totalCashOuts}\n\n`;
+
+  const diff = totalBuyIns - totalCashOuts;
+  if (diff === 0) {
+    ledger += `✅ **Balanced** - Ready to settle!`;
+  } else if (diff > 0) {
+    ledger += `⚠️ **Unbalanced** - $${diff} remaining in pot`;
+  } else {
+    ledger += `❌ **Over by $${Math.abs(diff)}** - Cash outs exceed buy-ins!`;
+  }
+
+  return ledger;
+}
+
+function settlePokerSession(roomId: string, requestingPlayer: string): { success: boolean; message: string; payments?: Array<{to: string, amount: number}> } {
+  const room = rooms.get(roomId);
+  if (!room || !room.pokerSession) {
+    return { success: false, message: 'No poker session active.' };
+  }
+
+  const session = room.pokerSession;
+
+  // Check if requester is host
+  if (session.host !== requestingPlayer) {
+    return { success: false, message: `Only ${session.host} (the host) can settle the session.` };
+  }
+
+  const totalBuyIns = session.buyIns.reduce((sum, bi) => sum + bi.amount, 0);
+  const totalCashOuts = session.cashOuts.reduce((sum, co) => sum + co.amount, 0);
+
+  // Validate balance
+  if (totalBuyIns !== totalCashOuts) {
+    const diff = totalBuyIns - totalCashOuts;
+    return {
+      success: false,
+      message: `❌ Cannot settle - amounts don't match!\n\nBuy-ins: $${totalBuyIns}\nCash outs: $${totalCashOuts}\nDifference: $${diff > 0 ? '+' : ''}${diff}\n\nPlease adjust the cash out amounts.`
+    };
+  }
+
+  // Prepare payments
+  const payments = session.cashOuts.map(co => {
+    // Find participant with this username to get wallet
+    const participant = room.participants.find(p => p.username === co.player);
+    return {
+      to: participant?.wallet || co.player, // Use wallet if available, else username
+      amount: co.amount
+    };
+  });
+
+  return {
+    success: true,
+    message: `✅ **Settlement Approved!**\n\nBuy-ins: $${totalBuyIns}\nCash outs: $${totalCashOuts}\n\nReady to pay:`,
+    payments
+  };
 }
 
 wss.on('listening', () => {
@@ -173,6 +317,31 @@ wss.on('connection', (ws: WebSocket) => {
           return;
         }
 
+        // If user is switching rooms, remove them from old room first
+        const oldRoomId = client.currentRoom;
+        if (oldRoomId && oldRoomId !== message.roomId) {
+          const oldRoom = rooms.get(oldRoomId);
+          if (oldRoom) {
+            // Remove from old room's participants
+            oldRoom.participants = oldRoom.participants.filter(p => p.username !== message.username);
+
+            // Send leave message to old room
+            const leaveMessage: SystemMessage = {
+              type: 'system',
+              roomId: oldRoomId,
+              text: `${message.username} left the room`,
+              timestamp: Date.now()
+            };
+            roomMessages.get(oldRoomId)?.push(leaveMessage);
+            broadcastToRoom(oldRoomId, leaveMessage);
+
+            // Update user list in old room
+            sendUserListToRoom(oldRoomId);
+
+            log.client(message.username, `left room ${oldRoom.roomName} (${oldRoomId})`);
+          }
+        }
+
         client.username = message.username;
         client.wallet = message.wallet || null;
         client.currentRoom = message.roomId;
@@ -209,6 +378,9 @@ wss.on('connection', (ws: WebSocket) => {
 
         // Send updated user list
         sendUserListToRoom(message.roomId);
+
+        // Broadcast updated room list to all clients
+        sendRoomListToAll();
 
       } else if (message.type === 'chat') {
         // Handle chat message
@@ -264,13 +436,20 @@ wss.on('connection', (ws: WebSocket) => {
           // Get the appropriate agent for this client's API key
           const selectedAgent = agents[client.apiKey];
 
-          // Build room context for agent
+          // Build room context for agent with poker helpers
           const roomContext = {
             roomName: room.roomName,
             mode: room.mode,
             participants: room.participants,
             contacts: room.contacts,
-            pokerSession: room.pokerSession
+            pokerSession: room.pokerSession,
+            // Poker helper functions
+            pokerHelpers: {
+              recordBuyIn: (player: string, amount: number) => recordBuyIn(roomId, player, amount),
+              recordCashOut: (player: string, amount: number) => recordCashOut(roomId, player, amount),
+              getLedger: () => getPokerLedger(roomId),
+              settle: (requestingPlayer: string) => settlePokerSession(roomId, requestingPlayer)
+            }
           };
 
           // Trigger agent (async, doesn't block)
@@ -291,6 +470,37 @@ wss.on('connection', (ws: WebSocket) => {
             },
             // Response callback
             (text, toolsUsed) => {
+              // Parse and execute poker actions from agent response
+              let finalText = text;
+              const actionPattern = /\[ACTION:\s*(\w+)\(([^)]+)\)\]/g;
+              const actions = [...text.matchAll(actionPattern)];
+
+              for (const action of actions) {
+                const [fullMatch, functionName, argsStr] = action;
+                const args = argsStr.split(',').map(a => a.trim().replace(/['"]/g, ''));
+
+                let result = '';
+                if (functionName === 'recordBuyIn' && args.length === 2) {
+                  result = recordBuyIn(roomId, args[0], parseFloat(args[1]));
+                } else if (functionName === 'recordCashOut' && args.length === 2) {
+                  result = recordCashOut(roomId, args[0], parseFloat(args[1]));
+                } else if (functionName === 'getLedger') {
+                  result = getPokerLedger(roomId);
+                } else if (functionName === 'settle' && args.length === 1) {
+                  const settleResult = settlePokerSession(roomId, args[0]);
+                  result = settleResult.message;
+
+                  // If settlement successful, prepare payment info
+                  if (settleResult.success && settleResult.payments) {
+                    result += '\n\n' + settleResult.payments.map(p => `- ${p.to}: $${p.amount}`).join('\n');
+                    result += '\n\nUse Locus to send these payments.';
+                  }
+                }
+
+                // Replace action marker with result
+                finalText = finalText.replace(fullMatch, result);
+              }
+
               // Stop typing indicator
               const typingEnd: AgentTypingMessage = {
                 type: 'agent_typing',
@@ -302,7 +512,7 @@ wss.on('connection', (ws: WebSocket) => {
               const agentResponse: AgentMessage = {
                 type: 'agent',
                 roomId,
-                text,
+                text: finalText,
                 timestamp: Date.now(),
                 tool_uses: toolsUsed
               };
@@ -363,6 +573,9 @@ wss.on('connection', (ws: WebSocket) => {
 
         // Send updated user list
         sendUserListToRoom(roomId);
+
+        // Broadcast updated room list to all clients
+        sendRoomListToAll();
       }
     }
 

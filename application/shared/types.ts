@@ -4,7 +4,7 @@ export type MessageType = 'connect' | 'create_room' | 'join_room' | 'chat' | 'sy
 
 export interface ConnectMessage {
   type: 'connect';
-  apiKey: 'main' | 'sunny';
+  apiKey: 'main' | 'sunny' | 'host';
 }
 
 export interface CreateRoomMessage {
@@ -26,7 +26,7 @@ export type RoomMode = 'casual' | 'poker' | 'trip';
 export interface Participant {
   username: string;
   wallet?: string;
-  apiKey: 'main' | 'sunny';
+  apiKey: 'main' | 'sunny' | 'host';
 }
 
 export interface Contact {
@@ -35,11 +35,16 @@ export interface Contact {
 }
 
 export interface PokerSession {
-  host: string; // wallet address
-  pot: number;
-  cashOutLedger: Array<{
+  host: string; // username who can settle
+  buyIns: Array<{
     player: string; // username
     amount: number;
+    timestamp: number;
+  }>;
+  cashOuts: Array<{
+    player: string; // username
+    amount: number;
+    timestamp: number;
   }>;
 }
 

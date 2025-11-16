@@ -24,7 +24,7 @@ export default function ChatPage() {
   // Connection state
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
-  const [apiKey, setApiKey] = useState<'main' | 'sunny' | null>(null);
+  const [apiKey, setApiKey] = useState<'main' | 'sunny' | 'host' | null>(null);
 
   // Room state
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -38,6 +38,7 @@ export default function ChatPage() {
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomMode, setNewRoomMode] = useState<RoomMode>('casual');
   const [joinRoomId, setJoinRoomId] = useState('');
+  const [pendingJoinRoomName, setPendingJoinRoomName] = useState<string | null>(null);
 
   // Chat state
   const [message, setMessage] = useState('');
@@ -52,6 +53,18 @@ export default function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, currentRoom]);
+
+  // Auto-join after room creation
+  useEffect(() => {
+    if (pendingJoinRoomName && rooms.length > 0) {
+      const newRoom = rooms.find(r => r.roomName === pendingJoinRoomName);
+      if (newRoom) {
+        setJoinRoomId(newRoom.roomId);
+        setShowJoinRoom(true);
+        setPendingJoinRoomName(null);
+      }
+    }
+  }, [rooms, pendingJoinRoomName]);
 
   // WebSocket connection
   useEffect(() => {
@@ -120,13 +133,17 @@ export default function ChatPage() {
     e.preventDefault();
     if (!ws || !newRoomName.trim()) return;
 
+    const roomName = newRoomName.trim();
     const createMsg: CreateRoomMessage = {
       type: 'create_room',
-      roomName: newRoomName.trim(),
+      roomName,
       mode: newRoomMode
     };
 
     ws.send(JSON.stringify(createMsg));
+
+    // Store room name to auto-join after it appears
+    setPendingJoinRoomName(roomName);
     setNewRoomName('');
     setShowCreateRoom(false);
   };
@@ -203,6 +220,127 @@ export default function ChatPage() {
     );
   };
 
+  // Render modals (always available)
+  const renderModals = () => (
+    <>
+      {/* Create Room Modal */}
+      {showCreateRoom && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-full max-w-md">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+              Create Room
+            </h2>
+
+            <form onSubmit={handleCreateRoom} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Room Name
+                </label>
+                <input
+                  type="text"
+                  value={newRoomName}
+                  onChange={(e) => setNewRoomName(e.target.value)}
+                  placeholder="e.g., Poker Night"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Mode
+                </label>
+                <select
+                  value={newRoomMode}
+                  onChange={(e) => setNewRoomMode(e.target.value as RoomMode)}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="casual">💬 Casual</option>
+                  <option value="poker">🎲 Poker</option>
+                  <option value="trip">✈️ Trip</option>
+                </select>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateRoom(false)}
+                  className="flex-1 py-3 bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white font-semibold rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newRoomName.trim()}
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
+                >
+                  Create Room
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Join Room Modal */}
+      {showJoinRoom && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-full max-w-md">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+              Join Room
+            </h2>
+
+            <form onSubmit={handleJoinRoom} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Your Name
+                </label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="e.g., Alissa"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Wallet Address (optional)
+                </label>
+                <input
+                  type="text"
+                  value={wallet}
+                  onChange={(e) => setWallet(e.target.value)}
+                  placeholder="0x..."
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowJoinRoom(false)}
+                  className="flex-1 py-3 bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white font-semibold rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!username.trim()}
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
+                >
+                  Join
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
   // API Key Selection Screen
   if (!apiKey) {
     return (
@@ -228,6 +366,12 @@ export default function ChatPage() {
             >
               Sunny's API
             </button>
+            <button
+              onClick={() => setApiKey('host')}
+              className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+            >
+              Host API
+            </button>
           </div>
         </div>
       </div>
@@ -237,7 +381,8 @@ export default function ChatPage() {
   // Room Selection Screen
   if (!currentRoom) {
     return (
-      <div className="flex min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+      <>
+        <div className="flex min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="w-full max-w-2xl">
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
@@ -297,123 +442,9 @@ export default function ChatPage() {
             </div>
           </div>
         </div>
-
-        {/* Create Room Modal */}
-        {showCreateRoom && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-full max-w-md">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-                Create Room
-              </h2>
-
-              <form onSubmit={handleCreateRoom} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Room Name
-                  </label>
-                  <input
-                    type="text"
-                    value={newRoomName}
-                    onChange={(e) => setNewRoomName(e.target.value)}
-                    placeholder="e.g., Poker Night"
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                    autoFocus
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Mode
-                  </label>
-                  <select
-                    value={newRoomMode}
-                    onChange={(e) => setNewRoomMode(e.target.value as RoomMode)}
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                  >
-                    <option value="casual">💬 Casual</option>
-                    <option value="poker">🎲 Poker</option>
-                    <option value="trip">✈️ Trip</option>
-                  </select>
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateRoom(false)}
-                    className="flex-1 py-3 bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white font-semibold rounded-lg transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!newRoomName.trim()}
-                    className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
-                  >
-                    Create
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Join Room Modal */}
-        {showJoinRoom && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-full max-w-md">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-                Join Room
-              </h2>
-
-              <form onSubmit={handleJoinRoom} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Your Name
-                  </label>
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="e.g., Alissa"
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                    autoFocus
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Wallet Address (optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={wallet}
-                    onChange={(e) => setWallet(e.target.value)}
-                    placeholder="0x..."
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                  />
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowJoinRoom(false)}
-                    className="flex-1 py-3 bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white font-semibold rounded-lg transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!username.trim()}
-                    className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
-                  >
-                    Join
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+        {renderModals()}
+      </>
     );
   }
 
@@ -422,7 +453,9 @@ export default function ChatPage() {
   const roomMessages = messages[currentRoom] || [];
 
   return (
-    <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
+    <>
+      {renderModals()}
+      <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
       {/* Sidebar - Room List */}
       <div className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-4 overflow-y-auto">
         <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
@@ -433,11 +466,28 @@ export default function ChatPage() {
             <button
               key={room.roomId}
               onClick={() => {
-                setCurrentRoom(room.roomId);
-                // Auto-rejoin if not in room
+                // If not logged in yet, show join modal
                 if (!username) {
                   setJoinRoomId(room.roomId);
                   setShowJoinRoom(true);
+                  return;
+                }
+
+                // If already in this room, do nothing
+                if (room.roomId === currentRoom) {
+                  return;
+                }
+
+                // Switch to different room - send join_room message to server
+                if (ws) {
+                  const joinMsg: JoinRoomMessage = {
+                    type: 'join_room',
+                    roomId: room.roomId,
+                    username: username,
+                    wallet: wallet || undefined
+                  };
+                  ws.send(JSON.stringify(joinMsg));
+                  setCurrentRoom(room.roomId);
                 }
               }}
               className={`w-full text-left p-3 rounded-lg transition-colors ${
@@ -625,6 +675,7 @@ export default function ChatPage() {
           </form>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

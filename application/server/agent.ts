@@ -69,6 +69,12 @@ export class LocusAgent {
       participants: any[];
       contacts: Record<string, string>;
       pokerSession?: any;
+      pokerHelpers?: {
+        recordBuyIn: (player: string, amount: number) => string;
+        recordCashOut: (player: string, amount: number) => string;
+        getLedger: () => string;
+        settle: (requestingPlayer: string) => { success: boolean; message: string; payments?: Array<{to: string, amount: number}> };
+      };
     }
   ): Promise<void> {
     if (this.isRunning) {
@@ -100,11 +106,35 @@ IMPORTANT RULES:
           systemPrompt += `\n- Saved Contacts: ${Object.entries(roomContext.contacts).map(([name, wallet]) => `${name}: ${wallet}`).join(', ')}`;
         }
 
-        if (roomContext.pokerSession) {
-          systemPrompt += `\n- Poker Session Active:
-  Host: ${roomContext.pokerSession.host}
-  Pot: $${roomContext.pokerSession.pot}
-  Cash Out Ledger: ${roomContext.pokerSession.cashOutLedger.map((entry: any) => `${entry.player}: $${entry.amount}`).join(', ')}`;
+        if (roomContext.mode === 'poker') {
+          systemPrompt += `\n\n🎲 POKER MODE INSTRUCTIONS:
+You have access to poker session tracking. Users will say things like:
+- "I bought in for $100" → Call recordBuyIn(username, 100)
+- "Cash out $150" or "I want to cash out $150" → Call recordCashOut(username, 150)
+- "Show ledger" or "what's the ledger" → Call getLedger()
+- "Settle up" or "pay everyone out" → Call settle(username)
+
+IMPORTANT RULES:
+- Extract the player name and amount from natural language
+- When someone says "I bought in", use their username from the message
+- When settling, validate that buy-ins = cash outs
+- If settlement fails, explain the difference clearly
+- After successful settlement, use Locus tools to actually send the payments
+
+When you need to call these functions, respond with your action in this format:
+"[ACTION: recordBuyIn(alice, 100)]" or "[ACTION: getLedger()]"
+I will execute it and give you the result.`;
+
+          if (roomContext.pokerSession) {
+            const totalBuyIns = roomContext.pokerSession.buyIns?.reduce((sum: number, bi: any) => sum + bi.amount, 0) || 0;
+            const totalCashOuts = roomContext.pokerSession.cashOuts?.reduce((sum: number, co: any) => sum + co.amount, 0) || 0;
+            systemPrompt += `\n\nCurrent Poker Session:
+- Host: ${roomContext.pokerSession.host}
+- Total Buy-ins: $${totalBuyIns}
+- Total Cash Outs: $${totalCashOuts}
+- Buy-ins: ${roomContext.pokerSession.buyIns?.map((bi: any) => `${bi.player}: $${bi.amount}`).join(', ') || 'None'}
+- Cash Outs: ${roomContext.pokerSession.cashOuts?.map((co: any) => `${co.player}: $${co.amount}`).join(', ') || 'None'}`;
+          }
         }
 
         systemPrompt += `\n\nCONTACT MANAGEMENT:
