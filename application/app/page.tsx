@@ -264,37 +264,48 @@ export default function ChatPage() {
               </p>
 
               {connected ? (
-                rooms.length > 0 ? (
-                  <div className="space-y-3">
-                    {rooms.map((room) => (
-                      <button
-                        key={room.roomId}
-                        onClick={() => handleSelectRoom(room.roomId)}
-                        className="w-full p-4 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors text-left"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h3 className="font-semibold text-gray-900 dark:text-white">
-                              {room.roomName}
-                            </h3>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                              {room.mode === 'poker' && '🎲 Poker'}
-                              {room.mode === 'trip' && '✈️ Trip'}
-                              {room.mode === 'casual' && '💬 Casual'} • {room.participantCount} participants
-                            </p>
-                          </div>
-                          <span className="text-indigo-600 dark:text-indigo-400">→</span>
+                <div className="space-y-3">
+                  {/* Mock room - girls night */}
+                  <button
+                    onClick={() => handleSelectRoom('mock-girls-night')}
+                    className="w-full p-4 bg-indigo-100 dark:bg-indigo-900 hover:bg-indigo-200 dark:hover:bg-indigo-800 rounded-lg transition-colors text-left"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-semibold text-gray-900 dark:text-white">
+                          girls night ✈️
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          🎲 2 online
+                        </p>
+                      </div>
+                      <span className="text-indigo-600 dark:text-indigo-400">→</span>
+                    </div>
+                  </button>
+
+                  {/* Real rooms from server */}
+                  {rooms.map((room) => (
+                    <button
+                      key={room.roomId}
+                      onClick={() => handleSelectRoom(room.roomId)}
+                      className="w-full p-4 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors text-left"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-semibold text-gray-900 dark:text-white">
+                            {room.roomName}
+                          </h3>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            {room.mode === 'poker' && '🎲 Poker'}
+                            {room.mode === 'trip' && '✈️ Trip'}
+                            {room.mode === 'casual' && '💬 Casual'} • {room.participantCount} participants
+                          </p>
                         </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <p className="text-gray-600 dark:text-gray-400 mb-4">
-                      No rooms yet. Create one to get started!
-                    </p>
-                  </div>
-                )
+                        <span className="text-indigo-600 dark:text-indigo-400">→</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               ) : (
                 <div className="text-center py-12">
                   <p className="text-gray-600 dark:text-gray-400">Connecting...</p>
@@ -435,6 +446,28 @@ export default function ChatPage() {
           Rooms
         </h2>
         <div className="space-y-2 mb-4">
+          {/* Mock room - girls night */}
+          <button
+            onClick={() => {
+              setCurrentRoom('mock-girls-night');
+              if (!username) {
+                setJoinRoomId('mock-girls-night');
+                setShowJoinRoom(true);
+              }
+            }}
+            className={`w-full text-left p-3 rounded-lg transition-colors ${
+              'mock-girls-night' === currentRoom
+                ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-900 dark:text-indigo-100'
+                : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+            }`}
+          >
+            <div className="font-medium">girls night ✈️</div>
+            <div className="text-xs opacity-75">
+              🎲 2 online
+            </div>
+          </button>
+
+          {/* Real rooms from server */}
           {rooms.map((room) => (
             <button
               key={room.roomId}
