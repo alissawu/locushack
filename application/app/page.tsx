@@ -243,7 +243,7 @@ export default function ChatPage() {
                   <Button
                     onClick={() => setApiKey('host')}
                     variant="purple"
-                    className="w-full py-6 text-lg rounded-xl"
+                    className="w-full py-6 text-lg rounded-xl bg-purple-600 hover:bg-purple-700"
                   >
                     Host API
                   </Button>
@@ -255,9 +255,9 @@ export default function ChatPage() {
                   <Button
                     onClick={() => setApiKey('alyssa')}
                     variant="purple"
-                    className="w-full py-6 text-lg rounded-xl bg-green-600 hover:bg-green-700"
+                    className="w-full py-6 text-lg rounded-xl bg-indigo-600 hover:bg-indigo-700"
                   >
-                    Alyssa's API
+                    Alissa's API
                   </Button>
                 </motion.div>
                 <motion.div
@@ -267,7 +267,7 @@ export default function ChatPage() {
                   <Button
                     onClick={() => setApiKey('sunny')}
                     variant="purple"
-                    className="w-full py-6 text-lg rounded-xl"
+                    className="w-full py-6 text-lg rounded-xl bg-cyan-600 hover:bg-cyan-700"
                   >
                     Sunny's API
                   </Button>
