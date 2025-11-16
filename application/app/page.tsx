@@ -190,10 +190,10 @@ export default function ChatPage() {
                 key={idx}
                 className={`font-semibold ${
                   isMentioningMe
-                    ? 'bg-yellow-200 dark:bg-yellow-600 px-1 rounded'
+                    ? 'bg-purple-500/30 px-1.5 py-0.5 rounded border border-purple-400/50'
                     : isOwnMessage
-                    ? 'text-indigo-200'
-                    : 'text-indigo-600 dark:text-indigo-400'
+                    ? 'text-purple-200'
+                    : 'text-purple-400'
                 }`}
               >
                 {part}
@@ -540,15 +540,15 @@ export default function ChatPage() {
   const roomMessages = messages[currentRoom] || [];
 
   return (
-    <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
+    <div className="flex h-screen bg-black">
       {/* Sidebar - Room List */}
-      <div className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-4 overflow-y-auto">
-        <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
+      <div className="w-64 bg-zinc-900/50 border-r border-white/10 p-4 overflow-y-auto backdrop-blur-lg">
+        <h2 className="text-lg font-semibold mb-4 text-white">
           Rooms
         </h2>
         <div className="space-y-2 mb-4">
           {/* Mock room - girls night */}
-          <button
+          <motion.button
             onClick={() => {
               setCurrentRoom('mock-girls-night');
               if (!username) {
@@ -556,21 +556,23 @@ export default function ChatPage() {
                 setShowJoinRoom(true);
               }
             }}
-            className={`w-full text-left p-3 rounded-lg transition-colors ${
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className={`w-full text-left p-3 rounded-xl transition-colors ${
               'mock-girls-night' === currentRoom
-                ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-900 dark:text-indigo-100'
-                : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+                ? 'bg-purple-900/50 border border-purple-500/50 text-white'
+                : 'bg-zinc-800/50 border border-white/10 hover:border-white/20 text-zinc-300'
             }`}
           >
             <div className="font-medium">girls night ✈️</div>
-            <div className="text-xs opacity-75">
+            <div className="text-xs text-zinc-400">
               🎲 2 online
             </div>
-          </button>
+          </motion.button>
 
           {/* Real rooms from server */}
           {rooms.map((room) => (
-            <button
+            <motion.button
               key={room.roomId}
               onClick={() => {
                 setCurrentRoom(room.roomId);
@@ -580,40 +582,48 @@ export default function ChatPage() {
                   setShowJoinRoom(true);
                 }
               }}
-              className={`w-full text-left p-3 rounded-lg transition-colors ${
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className={`w-full text-left p-3 rounded-xl transition-colors ${
                 room.roomId === currentRoom
-                  ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-900 dark:text-indigo-100'
-                  : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+                  ? 'bg-purple-900/50 border border-purple-500/50 text-white'
+                  : 'bg-zinc-800/50 border border-white/10 hover:border-white/20 text-zinc-300'
               }`}
             >
               <div className="font-medium">{room.roomName}</div>
-              <div className="text-xs opacity-75">
+              <div className="text-xs text-zinc-400">
                 {room.mode === 'poker' && '🎲'}
                 {room.mode === 'trip' && '✈️'}
                 {room.mode === 'casual' && '💬'} {room.participantCount} online
               </div>
-            </button>
+            </motion.button>
           ))}
         </div>
 
-        <button
+        <Button
           onClick={() => setShowCreateRoom(true)}
-          className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors text-sm"
+          variant="purple"
+          className="w-full rounded-xl text-sm"
         >
           + Create Room
-        </button>
+        </Button>
 
-        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <h3 className="text-sm font-semibold mb-2 text-gray-900 dark:text-white">
+        <div className="mt-4 pt-4 border-t border-white/10">
+          <h3 className="text-sm font-semibold mb-2 text-white">
             Online ({users.length})
           </h3>
           <ul className="space-y-2">
             {users.map((user) => (
-              <li key={user} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+              <motion.li
+                key={user}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="flex items-center gap-2 text-sm text-zinc-300"
+              >
+                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
                 {user}
-                {user === username && <span className="text-xs text-gray-500">(you)</span>}
-              </li>
+                {user === username && <span className="text-xs text-zinc-500">(you)</span>}
+              </motion.li>
             ))}
           </ul>
         </div>
@@ -622,11 +632,11 @@ export default function ChatPage() {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 flex-shrink-0">
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
-            {currentRoomData?.roomName || 'Chat'}
+        <div className="bg-zinc-900/50 border-b border-white/10 p-4 flex-shrink-0 backdrop-blur-lg">
+          <h1 className="text-xl font-semibold text-white">
+            {currentRoomData?.roomName || 'girls night ✈️'}
           </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
+          <p className="text-sm text-zinc-400">
             {currentRoomData?.mode === 'poker' && '🎲 Poker Mode'}
             {currentRoomData?.mode === 'trip' && '✈️ Trip Mode'}
             {currentRoomData?.mode === 'casual' && '💬 Casual Mode'} • {username}
@@ -634,64 +644,84 @@ export default function ChatPage() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 bg-gradient-to-b from-black to-zinc-950">
           {roomMessages.map((msg, idx) => {
             if (msg.type === 'system') {
               return (
-                <div key={idx} className="text-center">
-                  <span className="inline-block px-3 py-1 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full text-sm">
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="text-center"
+                >
+                  <span className="inline-block px-3 py-1 bg-zinc-800/50 border border-white/10 text-zinc-400 rounded-full text-sm backdrop-blur-sm">
                     {msg.text}
                   </span>
-                </div>
+                </motion.div>
               );
             }
 
             if (msg.type === 'agent_progress') {
               return (
-                <div key={idx} className="flex justify-start">
-                  <div className="max-w-xs lg:max-w-md px-4 py-2 rounded-2xl bg-purple-50 dark:bg-purple-800 border border-purple-200 dark:border-purple-600">
-                    <p className="text-xs font-semibold mb-1 text-purple-600 dark:text-purple-300">
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex justify-start"
+                >
+                  <div className="max-w-xs lg:max-w-md px-4 py-2 rounded-2xl bg-purple-900/30 border border-purple-500/50 backdrop-blur-sm">
+                    <p className="text-xs font-semibold mb-1 text-purple-400">
                       🔧 Tool Usage
                     </p>
-                    <p className="text-sm text-gray-700 dark:text-gray-200">{msg.text}</p>
+                    <p className="text-sm text-zinc-300">{msg.text}</p>
                   </div>
-                </div>
+                </motion.div>
               );
             }
 
             if (msg.type === 'agent') {
               return (
-                <div key={idx} className="flex justify-start">
-                  <div className="max-w-xs lg:max-w-md px-4 py-2 rounded-2xl bg-purple-100 dark:bg-purple-900 border-2 border-purple-300 dark:border-purple-700">
-                    <p className="text-xs font-semibold mb-1 text-purple-700 dark:text-purple-300">
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex justify-start"
+                >
+                  <div className="max-w-xs lg:max-w-md px-4 py-3 rounded-2xl bg-purple-900/50 border-2 border-purple-500/50 backdrop-blur-sm">
+                    <p className="text-xs font-semibold mb-2 text-purple-300">
                       🤖 Locus Agent
                     </p>
-                    <div className="break-words text-gray-900 dark:text-white prose prose-sm max-w-none dark:prose-invert">
+                    <div className="break-words text-white prose prose-sm max-w-none prose-invert">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
                     </div>
                     {msg.timestamp && (
-                      <p className="text-xs mt-1 text-purple-600 dark:text-purple-400">
+                      <p className="text-xs mt-2 text-purple-400">
                         {formatTime(msg.timestamp)}
                       </p>
                     )}
                   </div>
-                </div>
+                </motion.div>
               );
             }
 
             if (msg.type === 'chat') {
               const isOwn = msg.username === username;
               return (
-                <div key={idx} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, x: isOwn ? 20 : -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
+                >
                   <div
-                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl backdrop-blur-sm ${
                       isOwn
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
+                        ? 'bg-purple-600 text-white border border-purple-500'
+                        : 'bg-zinc-800/70 border border-white/10 text-white'
                     }`}
                   >
                     {!isOwn && (
-                      <p className="text-xs font-semibold mb-1 text-indigo-600 dark:text-indigo-400">
+                      <p className="text-xs font-semibold mb-1 text-purple-400">
                         {msg.username}
                       </p>
                     )}
@@ -699,14 +729,14 @@ export default function ChatPage() {
                     {msg.timestamp && (
                       <p
                         className={`text-xs mt-1 ${
-                          isOwn ? 'text-indigo-200' : 'text-gray-500 dark:text-gray-400'
+                          isOwn ? 'text-purple-200' : 'text-zinc-500'
                         }`}
                       >
                         {formatTime(msg.timestamp)}
                       </p>
                     )}
                   </div>
-                </div>
+                </motion.div>
               );
             }
 
@@ -715,36 +745,40 @@ export default function ChatPage() {
 
           {/* Agent Typing Indicator */}
           {agentTyping && (
-            <div className="flex justify-start">
-              <div className="max-w-xs lg:max-w-md px-4 py-3 rounded-2xl bg-purple-100 dark:bg-purple-900 border-2 border-purple-300 dark:border-purple-700">
-                <p className="text-xs font-semibold mb-1 text-purple-700 dark:text-purple-300">
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="flex justify-start"
+            >
+              <div className="max-w-xs lg:max-w-md px-4 py-3 rounded-2xl bg-purple-900/50 border-2 border-purple-500/50 backdrop-blur-sm">
+                <p className="text-xs font-semibold mb-1 text-purple-300">
                   🤖 Locus Agent
                 </p>
                 <div className="flex items-center gap-1">
                   <div className="flex gap-1">
                     <span
-                      className="w-2 h-2 bg-purple-600 dark:bg-purple-400 rounded-full animate-bounce"
+                      className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"
                       style={{ animationDelay: '0ms' }}
                     ></span>
                     <span
-                      className="w-2 h-2 bg-purple-600 dark:bg-purple-400 rounded-full animate-bounce"
+                      className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"
                       style={{ animationDelay: '150ms' }}
                     ></span>
                     <span
-                      className="w-2 h-2 bg-purple-600 dark:bg-purple-400 rounded-full animate-bounce"
+                      className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"
                       style={{ animationDelay: '300ms' }}
                     ></span>
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
           )}
 
           <div ref={messagesEndRef} />
         </div>
 
         {/* Input */}
-        <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 flex-shrink-0">
+        <div className="bg-zinc-900/50 border-t border-white/10 p-4 flex-shrink-0 backdrop-blur-lg">
           <form onSubmit={handleSendMessage} className="flex gap-2">
             <input
               ref={inputRef}
@@ -752,16 +786,17 @@ export default function ChatPage() {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Type a message... (use @locus for agent)"
-              className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+              className="flex-1 px-4 py-3 bg-zinc-800 border border-white/10 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-zinc-500"
               autoFocus
             />
-            <button
+            <Button
               type="submit"
               disabled={!message.trim()}
-              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
+              variant="purple"
+              className="px-6 py-3 rounded-xl"
             >
               Send
-            </button>
+            </Button>
           </form>
         </div>
       </div>
