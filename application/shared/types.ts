@@ -4,7 +4,7 @@ export type MessageType = 'connect' | 'create_room' | 'join_room' | 'chat' | 'sy
 
 export interface ConnectMessage {
   type: 'connect';
-  apiKey: 'main' | 'sunny';
+  apiKey: 'host' | 'alyssa' | 'sunny';
 }
 
 export interface CreateRoomMessage {
@@ -26,7 +26,7 @@ export type RoomMode = 'casual' | 'poker' | 'trip';
 export interface Participant {
   username: string;
   wallet?: string;
-  apiKey: 'main' | 'sunny';
+  apiKey: 'host' | 'alyssa' | 'sunny';
 }
 
 export interface Contact {

@@ -24,7 +24,7 @@ export default function ChatPage() {
   // Connection state
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
-  const [apiKey, setApiKey] = useState<'main' | 'sunny' | null>(null);
+  const [apiKey, setApiKey] = useState<'host' | 'alyssa' | 'sunny' | null>(null);
 
   // Room state
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -217,10 +217,16 @@ export default function ChatPage() {
 
           <div className="space-y-3">
             <button
-              onClick={() => setApiKey('main')}
+              onClick={() => setApiKey('host')}
               className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors"
             >
-              Main API
+              Host API
+            </button>
+            <button
+              onClick={() => setApiKey('alyssa')}
+              className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+            >
+              Alyssa's API
             </button>
             <button
               onClick={() => setApiKey('sunny')}
@@ -254,7 +260,7 @@ export default function ChatPage() {
               </div>
 
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Connected with: {apiKey === 'main' ? 'Main API' : "Sunny's API"}
+                Connected with: {apiKey === 'host' ? 'Host API' : apiKey === 'alyssa' ? "Alyssa's API" : "Sunny's API"}
               </p>
 
               {connected ? (

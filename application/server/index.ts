@@ -11,7 +11,8 @@ config({ path: '../.env' });
 
 // Verify env vars loaded
 console.log('[Server] Environment check:', {
-  LOCUS_API_KEY: process.env.LOCUS_API_KEY ? `${process.env.LOCUS_API_KEY.substring(0, 10)}...` : 'MISSING',
+  HOST_LOCUS_API_KEY: process.env.HOST_LOCUS_API_KEY ? `${process.env.HOST_LOCUS_API_KEY.substring(0, 10)}...` : 'MISSING',
+  ALYSSA_LOCUS_API_KEY: process.env.ALYSSA_LOCUS_API_KEY ? `${process.env.ALYSSA_LOCUS_API_KEY.substring(0, 10)}...` : 'MISSING',
   SUNNY_LOCUS_API_KEY: process.env.SUNNY_LOCUS_API_KEY ? `${process.env.SUNNY_LOCUS_API_KEY.substring(0, 10)}...` : 'MISSING',
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? `${process.env.ANTHROPIC_API_KEY.substring(0, 10)}...` : 'MISSING'
 });
@@ -21,7 +22,7 @@ const HOST = '0.0.0.0'; // Bind to all network interfaces for LAN access
 
 interface Client {
   ws: WebSocket;
-  apiKey: 'main' | 'sunny';
+  apiKey: 'host' | 'alyssa' | 'sunny';
   currentRoom: string | null;
   username: string | null;
   wallet: string | null;
@@ -43,8 +44,12 @@ const log = {
 
 // Initialize Locus agents (one per API key)
 const agents = {
-  main: new LocusAgent(
-    process.env.LOCUS_API_KEY || '',
+  host: new LocusAgent(
+    process.env.HOST_LOCUS_API_KEY || '',
+    process.env.ANTHROPIC_API_KEY || ''
+  ),
+  alyssa: new LocusAgent(
+    process.env.ALYSSA_LOCUS_API_KEY || '',
     process.env.ANTHROPIC_API_KEY || ''
   ),
   sunny: new LocusAgent(
@@ -52,7 +57,7 @@ const agents = {
     process.env.ANTHROPIC_API_KEY || ''
   )
 };
-log.info('Agents initialized (main + sunny)');
+log.info('Agents initialized (host + alyssa + sunny)');
 
 const wss = new WebSocketServer({
   port: PORT,
@@ -110,7 +115,7 @@ wss.on('listening', () => {
 wss.on('connection', (ws: WebSocket) => {
   const client: Client = {
     ws,
-    apiKey: 'main',
+    apiKey: 'host',
     currentRoom: null,
     username: null,
     wallet: null

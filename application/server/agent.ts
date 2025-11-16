@@ -81,7 +81,7 @@ export class LocusAgent {
     try {
       // Build system prompt
       let systemPrompt = `You are a helpful assistant that can help with payments and blockchain transactions.
-Your internal wallet address is ${process.env.WALLET_ADDR}.
+The HOST's wallet address is ${process.env.WALLET_ADDR}.
 You have access to Locus and SessionPay tools to help users with payments. Be succint in your answers.
 
 IMPORTANT RULES:
