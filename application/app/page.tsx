@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { motion } from 'framer-motion';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import type {
   ClientMessage,
   ServerMessage,
@@ -206,36 +209,73 @@ export default function ChatPage() {
   // API Key Selection Screen
   if (!apiKey) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-        <div className="w-full max-w-md p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-xl">
-          <h1 className="text-3xl font-bold text-center mb-2 text-gray-900 dark:text-white">
-            SessionPay
-          </h1>
-          <p className="text-center text-gray-600 dark:text-gray-400 mb-6">
-            Select your API key
-          </p>
-
-          <div className="space-y-3">
-            <button
-              onClick={() => setApiKey('host')}
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors"
-            >
-              Host API
-            </button>
-            <button
-              onClick={() => setApiKey('alyssa')}
-              className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
-            >
-              Alyssa's API
-            </button>
-            <button
-              onClick={() => setApiKey('sunny')}
-              className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors"
-            >
-              Sunny's API
-            </button>
-          </div>
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-zinc-900/50 to-black relative overflow-hidden">
+        {/* Background particles effect */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-b from-zinc-900/50 to-black"></div>
         </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className="relative w-full max-w-md"
+        >
+          <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-lg">
+            <CardContent className="p-8">
+              <motion.h1
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                className="text-4xl font-bold text-center mb-2 bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-500"
+              >
+                SessionPay
+              </motion.h1>
+              <p className="text-center text-zinc-400 mb-8">
+                Select your API key
+              </p>
+
+              <div className="space-y-3">
+                <motion.div
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <Button
+                    onClick={() => setApiKey('host')}
+                    variant="purple"
+                    className="w-full py-6 text-lg rounded-xl"
+                  >
+                    Host API
+                  </Button>
+                </motion.div>
+                <motion.div
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <Button
+                    onClick={() => setApiKey('alyssa')}
+                    variant="purple"
+                    className="w-full py-6 text-lg rounded-xl bg-green-600 hover:bg-green-700"
+                  >
+                    Alyssa's API
+                  </Button>
+                </motion.div>
+                <motion.div
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <Button
+                    onClick={() => setApiKey('sunny')}
+                    variant="purple"
+                    className="w-full py-6 text-lg rounded-xl"
+                  >
+                    Sunny's API
+                  </Button>
+                </motion.div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
     );
   }
@@ -243,192 +283,253 @@ export default function ChatPage() {
   // Room Selection Screen
   if (!currentRoom) {
     return (
-      <div className="flex min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="w-full max-w-2xl">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
-              <div className="flex items-center justify-between mb-6">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                  Rooms
-                </h1>
-                <button
-                  onClick={() => setShowCreateRoom(true)}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors"
-                >
-                  + Create Room
-                </button>
-              </div>
+      <div className="flex min-h-screen bg-gradient-to-b from-zinc-900/50 to-black relative overflow-hidden">
+        {/* Background effect */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-b from-zinc-900/50 to-black"></div>
+        </div>
 
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Connected with: {apiKey === 'host' ? 'Host API' : apiKey === 'alyssa' ? "Alyssa's API" : "Sunny's API"}
-              </p>
+        <div className="flex-1 flex items-center justify-center p-8 relative">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="w-full max-w-2xl"
+          >
+            <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-lg">
+              <CardContent className="p-8">
+                <div className="flex items-center justify-between mb-6">
+                  <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-500">
+                    Rooms
+                  </h1>
+                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <Button
+                      onClick={() => setShowCreateRoom(true)}
+                      variant="purple"
+                      className="rounded-xl"
+                    >
+                      + Create Room
+                    </Button>
+                  </motion.div>
+                </div>
 
-              {connected ? (
-                <div className="space-y-3">
-                  {/* Mock room - girls night */}
-                  <button
-                    onClick={() => handleSelectRoom('mock-girls-night')}
-                    className="w-full p-4 bg-indigo-100 dark:bg-indigo-900 hover:bg-indigo-200 dark:hover:bg-indigo-800 rounded-lg transition-colors text-left"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-semibold text-gray-900 dark:text-white">
-                          girls night ✈️
-                        </h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          🎲 2 online
-                        </p>
-                      </div>
-                      <span className="text-indigo-600 dark:text-indigo-400">→</span>
-                    </div>
-                  </button>
+                <p className="text-sm text-zinc-400 mb-6">
+                  Connected with: {apiKey === 'host' ? 'Host API' : apiKey === 'alyssa' ? "Alyssa's API" : "Sunny's API"}
+                </p>
 
-                  {/* Real rooms from server */}
-                  {rooms.map((room) => (
-                    <button
-                      key={room.roomId}
-                      onClick={() => handleSelectRoom(room.roomId)}
-                      className="w-full p-4 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors text-left"
+                {connected ? (
+                  <div className="space-y-3">
+                    {/* Mock room - girls night */}
+                    <motion.button
+                      onClick={() => handleSelectRoom('mock-girls-night')}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="w-full p-4 bg-purple-900/30 border border-purple-500/50 hover:border-purple-400 rounded-xl transition-colors text-left"
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <h3 className="font-semibold text-gray-900 dark:text-white">
-                            {room.roomName}
+                          <h3 className="font-semibold text-white">
+                            girls night ✈️
                           </h3>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            {room.mode === 'poker' && '🎲 Poker'}
-                            {room.mode === 'trip' && '✈️ Trip'}
-                            {room.mode === 'casual' && '💬 Casual'} • {room.participantCount} participants
+                          <p className="text-sm text-zinc-400">
+                            🎲 2 online
                           </p>
                         </div>
-                        <span className="text-indigo-600 dark:text-indigo-400">→</span>
+                        <span className="text-purple-400">→</span>
                       </div>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <p className="text-gray-600 dark:text-gray-400">Connecting...</p>
-                </div>
-              )}
-            </div>
-          </div>
+                    </motion.button>
+
+                    {/* Real rooms from server */}
+                    {rooms.map((room, index) => (
+                      <motion.button
+                        key={room.roomId}
+                        onClick={() => handleSelectRoom(room.roomId)}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 + index * 0.1 }}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="w-full p-4 bg-zinc-900/50 border border-white/10 hover:border-white/20 rounded-xl transition-colors text-left"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="font-semibold text-white">
+                              {room.roomName}
+                            </h3>
+                            <p className="text-sm text-zinc-400">
+                              {room.mode === 'poker' && '🎲 Poker'}
+                              {room.mode === 'trip' && '✈️ Trip'}
+                              {room.mode === 'casual' && '💬 Casual'} • {room.participantCount} participants
+                            </p>
+                          </div>
+                          <span className="text-purple-400">→</span>
+                        </div>
+                      </motion.button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <motion.p
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.5 }}
+                      className="text-zinc-400"
+                    >
+                      Connecting...
+                    </motion.p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
         </div>
 
         {/* Create Room Modal */}
         {showCreateRoom && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-full max-w-md">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-                Create Room
-              </h2>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Card className="bg-zinc-900/90 border-white/10 backdrop-blur-lg w-full max-w-md">
+                <CardContent className="p-6">
+                  <h2 className="text-2xl font-bold text-white mb-4">
+                    Create Room
+                  </h2>
 
-              <form onSubmit={handleCreateRoom} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Room Name
-                  </label>
-                  <input
-                    type="text"
-                    value={newRoomName}
-                    onChange={(e) => setNewRoomName(e.target.value)}
-                    placeholder="e.g., Poker Night"
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                    autoFocus
-                  />
-                </div>
+                  <form onSubmit={handleCreateRoom} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-zinc-300 mb-2">
+                        Room Name
+                      </label>
+                      <input
+                        type="text"
+                        value={newRoomName}
+                        onChange={(e) => setNewRoomName(e.target.value)}
+                        placeholder="e.g., Poker Night"
+                        className="w-full px-4 py-3 bg-zinc-800 border border-white/10 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-zinc-500"
+                        autoFocus
+                      />
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Mode
-                  </label>
-                  <select
-                    value={newRoomMode}
-                    onChange={(e) => setNewRoomMode(e.target.value as RoomMode)}
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                  >
-                    <option value="casual">💬 Casual</option>
-                    <option value="poker">🎲 Poker</option>
-                    <option value="trip">✈️ Trip</option>
-                  </select>
-                </div>
+                    <div>
+                      <label className="block text-sm font-medium text-zinc-300 mb-2">
+                        Mode
+                      </label>
+                      <select
+                        value={newRoomMode}
+                        onChange={(e) => setNewRoomMode(e.target.value as RoomMode)}
+                        className="w-full px-4 py-3 bg-zinc-800 border border-white/10 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white"
+                      >
+                        <option value="casual">💬 Casual</option>
+                        <option value="poker">🎲 Poker</option>
+                        <option value="trip">✈️ Trip</option>
+                      </select>
+                    </div>
 
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateRoom(false)}
-                    className="flex-1 py-3 bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white font-semibold rounded-lg transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!newRoomName.trim()}
-                    className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
-                  >
-                    Create
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
+                    <div className="flex gap-3 pt-2">
+                      <Button
+                        type="button"
+                        onClick={() => setShowCreateRoom(false)}
+                        variant="outline"
+                        className="flex-1 rounded-xl border-white/20 hover:bg-zinc-800"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={!newRoomName.trim()}
+                        variant="purple"
+                        className="flex-1 rounded-xl"
+                      >
+                        Create
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </motion.div>
         )}
 
         {/* Join Room Modal */}
         {showJoinRoom && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-full max-w-md">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-                Join Room
-              </h2>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Card className="bg-zinc-900/90 border-white/10 backdrop-blur-lg w-full max-w-md">
+                <CardContent className="p-6">
+                  <h2 className="text-2xl font-bold text-white mb-4">
+                    Join Room
+                  </h2>
 
-              <form onSubmit={handleJoinRoom} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Your Name
-                  </label>
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="e.g., Alissa"
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                    autoFocus
-                  />
-                </div>
+                  <form onSubmit={handleJoinRoom} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-zinc-300 mb-2">
+                        Your Name
+                      </label>
+                      <input
+                        type="text"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        placeholder="e.g., Alissa"
+                        className="w-full px-4 py-3 bg-zinc-800 border border-white/10 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-zinc-500"
+                        autoFocus
+                      />
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Wallet Address (optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={wallet}
-                    onChange={(e) => setWallet(e.target.value)}
-                    placeholder="0x..."
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                  />
-                </div>
+                    <div>
+                      <label className="block text-sm font-medium text-zinc-300 mb-2">
+                        Wallet Address (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={wallet}
+                        onChange={(e) => setWallet(e.target.value)}
+                        placeholder="0x..."
+                        className="w-full px-4 py-3 bg-zinc-800 border border-white/10 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-zinc-500"
+                      />
+                    </div>
 
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowJoinRoom(false)}
-                    className="flex-1 py-3 bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white font-semibold rounded-lg transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!username.trim()}
-                    className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
-                  >
-                    Join
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
+                    <div className="flex gap-3 pt-2">
+                      <Button
+                        type="button"
+                        onClick={() => setShowJoinRoom(false)}
+                        variant="outline"
+                        className="flex-1 rounded-xl border-white/20 hover:bg-zinc-800"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={!username.trim()}
+                        variant="purple"
+                        className="flex-1 rounded-xl"
+                      >
+                        Join
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </motion.div>
         )}
       </div>
     );
