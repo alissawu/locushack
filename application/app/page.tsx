@@ -540,13 +540,13 @@ export default function ChatPage() {
   const roomMessages = messages[currentRoom] || [];
 
   return (
-    <div className="flex h-screen bg-black">
+    <div className="flex h-screen bg-black overflow-hidden">
       {/* Sidebar - Room List */}
-      <div className="w-64 bg-zinc-900/50 border-r border-white/10 p-4 overflow-y-auto backdrop-blur-lg">
-        <h2 className="text-lg font-semibold mb-4 text-white">
+      <div className="w-64 bg-zinc-900/50 border-r border-white/10 p-4 flex flex-col backdrop-blur-lg overflow-hidden">
+        <h2 className="text-lg font-semibold mb-4 text-white flex-shrink-0">
           Rooms
         </h2>
-        <div className="space-y-2 mb-4">
+        <div className="flex-1 overflow-y-auto mb-4 space-y-2">
           {/* Mock room - girls night */}
           <motion.button
             onClick={() => {
@@ -600,37 +600,39 @@ export default function ChatPage() {
           ))}
         </div>
 
-        <Button
-          onClick={() => setShowCreateRoom(true)}
-          variant="purple"
-          className="w-full rounded-xl text-sm"
-        >
-          + Create Room
-        </Button>
+        <div className="flex-shrink-0">
+          <Button
+            onClick={() => setShowCreateRoom(true)}
+            variant="purple"
+            className="w-full rounded-xl text-sm"
+          >
+            + Create Room
+          </Button>
 
-        <div className="mt-4 pt-4 border-t border-white/10">
-          <h3 className="text-sm font-semibold mb-2 text-white">
-            Online ({users.length})
-          </h3>
-          <ul className="space-y-2">
-            {users.map((user) => (
-              <motion.li
-                key={user}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="flex items-center gap-2 text-sm text-zinc-300"
-              >
-                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                {user}
-                {user === username && <span className="text-xs text-zinc-500">(you)</span>}
-              </motion.li>
-            ))}
-          </ul>
+          <div className="mt-4 pt-4 border-t border-white/10">
+            <h3 className="text-sm font-semibold mb-2 text-white">
+              Online ({users.length})
+            </h3>
+            <ul className="space-y-2">
+              {users.map((user) => (
+                <motion.li
+                  key={user}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex items-center gap-2 text-sm text-zinc-300"
+                >
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                  {user}
+                  {user === username && <span className="text-xs text-zinc-500">(you)</span>}
+                </motion.li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
         <div className="bg-zinc-900/50 border-b border-white/10 p-4 flex-shrink-0 backdrop-blur-lg">
           <h1 className="text-xl font-semibold text-white">
@@ -644,7 +646,7 @@ export default function ChatPage() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 bg-gradient-to-b from-black to-zinc-950">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-black to-zinc-950">
           {roomMessages.map((msg, idx) => {
             if (msg.type === 'system') {
               return (
